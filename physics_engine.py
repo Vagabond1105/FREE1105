@@ -13,16 +13,20 @@ class PhysicsEngine:
     - energy diagnostics (kinetic + Coulomb potential)
     """
 
-    def __init__(self, softening_eps=400.0, min_r2=400.0, debug=False):
+    def __init__(self, softening_eps=400.0, debug=False):
         """
-        softening_eps: length scale used to soften Coulomb potential (pixels)
-        min_r2: fallback minimum r^2 in get_accelerations (keeps your previous safety)
+        softening_eps: length scale used to soften Coulomb potential (pixels).
+                       Must be > 0: it is what removes the r -> 0 singularity.
         debug: if True, print energy diagnostics occasionally
         """
+        if softening_eps <= 0:
+            raise ValueError("softening_eps must be > 0 (it regularises the r -> 0 singularity)")
         self.softening_eps = float(softening_eps)
         self.softening_eps2 = self.softening_eps * self.softening_eps
-        self.min_r2 = float(min_r2)
         self.debug = debug
+        # a(t+dt) from the previous step, reused as a(t) of the next step when
+        # nothing (collisions, walls, dragging, new charges) moved the particles in between
+        self._cached = None
 
     # ----- Force / Acceleration -----
     def get_accelerations(self, positions, velocities, charges, masses, static_status):
@@ -33,48 +37,27 @@ class PhysicsEngine:
         masses: (N,) array
         static_status: (N,) boolean array, True if static (immovable)
         returns: accelerations array shape (N,2)
+
+        Softened (Plummer) Coulomb force, all pairs at once with NumPy broadcasting:
+            F_i = sum_j k q_i q_j (r_i - r_j) / (|r_i - r_j|^2 + eps^2)^(3/2)
+        This is exactly -grad of the potential used in compute_energy,
+            U = sum_{i<j} k q_i q_j / sqrt(|r_i - r_j|^2 + eps^2),
+        so the force and the energy diagnostic always describe the same physics.
         """
         n = len(positions)
         accelerations = np.zeros((n, 2), dtype=float)
         if n < 2:
             return accelerations
 
-        # Pairwise O(N^2) Coulomb. Use softening by adding eps^2 to r^2.
-        for i in range(n):
-            if static_status[i]:
-                continue
-            net_force = np.zeros(2, dtype=float)
-            pos_i = positions[i]
-            qi = charges[i]
+        diff = positions[:, None, :] - positions[None, :, :]        # (N,N,2): r_i - r_j
+        r2_soft = np.einsum("ijk,ijk->ij", diff, diff) + self.softening_eps2
+        inv_r3 = r2_soft ** -1.5
+        np.fill_diagonal(inv_r3, 0.0)                                # no self-force
+        coeff = K_COULOMB * charges[:, None] * charges[None, :] * inv_r3
+        net_force = np.einsum("ij,ijk->ik", coeff, diff)
 
-            for j in range(n):
-                if i == j:
-                    continue
-
-                pos_j = positions[j]
-                qj = charges[j]
-                diff = pos_i - pos_j      # r_i - r_j (force on i)
-                r2 = np.dot(diff, diff)
-
-                # Respect minimum distance for stability (legacy fallback)
-                if r2 < self.min_r2:
-                    r2 = self.min_r2
-
-                # Softening addition for Coulomb denominator
-                r2_soft = r2 + self.softening_eps2
-                r = np.sqrt(r2_soft)
-
-                # Coulomb force magnitude: k * qi * qj / r^2_soft
-                # direction: diff / r
-                if r > 0:
-                    force_mag = (K_COULOMB * qi * qj) / r2_soft
-                    direction = diff / r
-                    force = force_mag * direction
-                    net_force += force
-                # else r extremely small, skip (shouldn't happen due to softening)
-
-            accelerations[i] = net_force / masses[i]
-
+        accelerations = net_force / masses[:, None]
+        accelerations[static_status] = 0.0                           # static charges never move
         return accelerations
 
     # ----- Symplectic Integrator: Velocity-Verlet -----
@@ -97,8 +80,15 @@ class PhysicsEngine:
         masses = np.array([p.mass for p in all_charges])
         static_status = np.array([p.static for p in all_charges], dtype=bool)
 
-        # 1. initial accelerations a(t)
-        a_t = self.get_accelerations(positions, velocities, charges, masses, static_status)
+        # 1. initial accelerations a(t): reuse last step's a(t+dt) if the particles
+        #    haven't been moved since (Velocity-Verlet then needs ONE force evaluation per step)
+        c = self._cached
+        if (c is not None and c[0].shape == positions.shape and np.array_equal(c[0], positions)
+                and np.array_equal(c[1], charges) and np.array_equal(c[2], masses)
+                and np.array_equal(c[3], static_status)):
+            a_t = c[4]
+        else:
+            a_t = self.get_accelerations(positions, velocities, charges, masses, static_status)
 
         # 2. update positions
         positions_new = positions + velocities * dt + 0.5 * a_t * (dt * dt)
@@ -114,6 +104,7 @@ class PhysicsEngine:
 
         # 4. update velocities
         velocities_new = velocities + 0.5 * (a_t + a_tdt) * dt
+        self._cached = (positions_new, charges, masses, static_status, a_tdt)
 
         # 5. write back into objects (skip static)
         for i in range(n):
@@ -242,7 +233,7 @@ class PhysicsEngine:
         """
         Returns (kinetic_energy, potential_energy) as floats.
         Potential energy is Coulomb pairwise sum: U = sum_{i<j} k qi qj / r_soft
-        (Note: r_soft uses softening to avoid singularity.)
+        with r_soft = sqrt(r^2 + eps^2), the same softening as the force.
         """
         n = len(all_charges)
         positions = np.array([p.position for p in all_charges])
@@ -251,23 +242,18 @@ class PhysicsEngine:
         masses = np.array([p.mass for p in all_charges])
         static_status = np.array([p.static for p in all_charges], dtype=bool)
 
-        # kinetic energy
-        ke = 0.0
-        for i in range(n):
-            v2 = np.dot(velocities[i], velocities[i])
-            ke += 0.5 * masses[i] * v2
+        if n == 0:
+            return 0.0, 0.0
 
-        # potential energy (pairwise Coulomb)
-        pe = 0.0
-        for i in range(n):
-            for j in range(i + 1, n):
-                diff = positions[i] - positions[j]
-                r2 = np.dot(diff, diff)
-                # use min fallback and softening consistent with forces
-                if r2 < self.min_r2:
-                    r2 = self.min_r2
-                r = np.sqrt(r2 + self.softening_eps2)
-                pe += K_COULOMB * charges[i] * charges[j] / r
+        # kinetic energy
+        ke = float(0.5 * np.sum(masses * np.einsum("ij,ij->i", velocities, velocities)))
+
+        # potential energy: pairwise softened Coulomb, each pair i<j counted once,
+        # with exactly the same softening as the force in get_accelerations
+        i, j = np.triu_indices(n, k=1)
+        diff = positions[i] - positions[j]
+        r_soft = np.sqrt(np.einsum("ij,ij->i", diff, diff) + self.softening_eps2)
+        pe = float(np.sum(K_COULOMB * charges[i] * charges[j] / r_soft))
 
         return ke, pe
 

@@ -6,7 +6,7 @@ import pygame
 import numpy as np
 from constants_for_all_files import *
 
-# Electric Field Calculation and Visualization
+# Electric Potential Calculation and Visualization
 
 class ElectricFieldSystem:
 
@@ -28,22 +28,21 @@ class ElectricFieldSystem:
             target_surface.fill(BGC)
             return
 
-        # Calculate the electric field at each grid point due to all charges
+        # Electric potential V(x, y) = sum_i k q_i / r_i at each grid point (the same
+        # quantity the Phase 4 surface shows). Potentials add as scalars; field
+        # strengths (k q / r^2) would have to be added as vectors instead.
 
         net_field = np.zeros_like(self.grid_x, dtype=float)
 
         for pc in charges:
             dx = self.grid_x - pc.position[0]
             dy = self.grid_y - pc.position[1]
-            r2 = dx**2 + dy**2
-            r2[r2 == 0] = E_CHARGE # Prevent division by zero
-            min_distance = pc.total_radius ** 2
-            r2[r2 < min_distance] = min_distance # Cap minimum distance squared to avoid extreme values
+            r = np.sqrt(dx**2 + dy**2)
+            r = np.maximum(r, pc.total_radius)  # inside a charge's disc, hold V at its surface value
 
-            contribution = (K_COULOMB * pc.charge) / r2
-            net_field += contribution
+            net_field += (K_COULOMB * pc.charge) / r
 
-        # colourises the heatmap based on field strength
+        # colourises the heatmap based on potential (positive = darker, negative = lighter, 0 = grey)
 
         max_val = np.max(np.abs(net_field))
         if max_val == 0:

@@ -15,7 +15,7 @@ phase4.start()
 # --- 1. INITIALIZATION & SETUP ---
 pygame.init()
 screen = pygame.display.set_mode((SW, SH))
-pygame.display.set_caption("FREE1105: Phase 2")
+pygame.display.set_caption("FREE1105")
 clock = pygame.time.Clock()
 
 # --- 2. SYSTEMS ---
@@ -276,7 +276,6 @@ while running:
             fps_slider.handle_event(event)
 
             if pause_btn.handle_event(event):
-                print(f"DEBUG: Pause clicked at {getattr(event, 'pos', None)}, create_form.active={create_form.active}, context_menu.active={context_menu.active}")
                 sim_state = 0.5 # Literally just pauses the sim
 
             elif reset_btn.handle_event(event):
@@ -303,7 +302,6 @@ while running:
 
             # Paused State - Listen for Unpause from same button or Reset
             if unpause_btn.handle_event(event):
-                print(f"DEBUG: Unpause clicked at {getattr(event, 'pos', None)}, create_form.active={create_form.active}, context_menu.active={context_menu.active}")
                 sim_state = 1 # Resume Simulation
 
             elif reset_btn.handle_event(event):
@@ -328,37 +326,16 @@ while running:
 
     if sim_state == 1:
 
-        # Get arrays for physics engine
-        positions = np.array([p.pos for p in all_point_charges])
-        velocities = np.array([p.vel for p in all_point_charges])
-        charges = np.array([p.charge for p in all_point_charges])
-        masses = np.array([p.mass for p in all_point_charges])
-        static_status = np.array([p.static for p in all_point_charges], dtype=bool)
-
         # 1. The Velocity-Verlet integration step (Motion with forces)
-        physics_engine.get_accelerations(positions, velocities, charges, masses, static_status)
         physics_engine.update_positions_velocities(dt, all_point_charges)
         
         # 2. Handle collisions AFTER integration
         physics_engine.handle_wall_collisions(all_point_charges, wall_cor)
         physics_engine.handle_particle_collisions(all_point_charges)
-        
-        # 3. Energy correction (only if all collisions are perfectly elastic)
-        # Check if all particles have e=1.0 and wall_cor=1.0
-        all_elastic = all(getattr(pc, 'e', 1.0) == 1.0 for pc in all_point_charges) and wall_cor == 1.0
-        
-        if all_elastic and initial_total_energy is not None:
-            # Calculate current energy
-            current_ke, current_pe = physics_engine.compute_energy(all_point_charges)
-            current_total = current_ke + current_pe
-            
-            # Only correct if there's actually kinetic energy to scale
-            if current_ke > 1e-10 and abs(current_total - initial_total_energy) > 1e-6:
-                # Scale velocities to restore energy
-                scale_factor = np.sqrt(max(0, (initial_total_energy - current_pe) / current_ke))
-                for pc in all_point_charges:
-                    if not pc.static:
-                        pc.vel *= scale_factor
+
+        # No energy "correction" here on purpose: the energy readout must show what the
+        # integrator actually does (Verlet: bounded oscillation, no drift), not a value
+        # forced back to E0 by rescaling velocities.
 
         # Record trails for each particle (only if toggle enabled)
         for pc in all_point_charges:
@@ -404,6 +381,19 @@ while running:
             pc.arrow_display = False
         pc.render_trails(screen)
         pc.render(screen)
+
+    # Layer 2.5: Energy readout (measured, never corrected)
+    if sim_state != 0 and initial_total_energy is not None:
+        total_energy = total_kinetic_energy + total_potential_energy
+        drift = (total_energy - initial_total_energy) / abs(initial_total_energy) if initial_total_energy else 0.0
+        energy_lines = [
+            f"KE     {total_kinetic_energy: .4e} J",
+            f"PE     {total_potential_energy: .4e} J",
+            f"Total  {total_energy: .4e} J",
+            f"(E - E0)/|E0|  {drift: .2e}",
+        ]
+        for line_no, line in enumerate(energy_lines):
+            screen.blit(energy_font.render(line, True, text_c), (WBT + 10, SH - WBT - 90 + 20 * line_no))
 
     # Layer 3: GUI (State Dependent)
 
@@ -457,8 +447,6 @@ while running:
     pygame.display.flip()
     clock.tick(fps)
 
-    for pc in all_point_charges:
-        print(f"ID {getattr(pc, 'pc_id', 'N/A')}: Pos {pc.pos}, Vel {pc.vel}, Pos_0 {pc.pos_0}, Vel_0 {pc.vel_0}")
 
 pygame.quit()
 phase4.stop()
