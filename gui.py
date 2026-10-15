@@ -826,6 +826,22 @@ class GenericSlider:
         pygame.draw.circle(screen, (0, 0, 0), (int(knob_x), int(self.slider_rect.centery)), self.knob_radius, 2)
         
         # Value Text
-        val_str = self.fmt.format(self.value)
-        value_text = self.font.render(val_str, True, (0, 0, 0))
+        value_text = self.font.render(self.value_text(), True, (0, 0, 0))
         screen.blit(value_text, (self.slider_rect.right + 10, self.slider_rect.centery - 7))
+
+    def value_text(self):
+        return self.fmt.format(self.value)
+
+class LogSlider(GenericSlider):
+    """A GenericSlider whose knob moves linearly in log10(value), for quantities
+    that span many orders of magnitude. self.value holds log10; use real_value."""
+    def __init__(self, x, y, width, height, min_val, max_val, initial_val, label):
+        super().__init__(x, y, width, height, np.log10(min_val), np.log10(max_val),
+                         np.log10(initial_val), label)
+
+    @property
+    def real_value(self):
+        return 10.0 ** self.value
+
+    def value_text(self):
+        return f"{self.real_value:.2e}"

@@ -28,6 +28,48 @@ class PhysicsEngine:
         # nothing (collisions, walls, dragging, new charges) moved the particles in between
         self._cached = None
 
+        # Larmor radiation. None = off; otherwise the speed of light in px/s.
+        # Lowering c is how the effect is made visible: with the real c the
+        # radiated power of a slow charge is negligibly small.
+        self.radiation_c = None
+        self.radiated_energy = 0.0   # running total of energy carried away by light (J)
+
+    def reset_radiation(self):
+        """Zero the radiated-energy tally (call when the simulation starts)."""
+        self.radiated_energy = 0.0
+
+    # ----- Larmor radiation -----
+    def apply_radiation(self, dt, velocities, accelerations, charges, masses, static_status):
+        """
+        Non-relativistic Larmor radiation (valid while v << c):
+            P = q^2 a^2 / (6 pi eps0 c^3) = (2/3) k q^2 a^2 / c^3      (k = 1/(4 pi eps0))
+        The emission pattern is dP/dOmega ∝ sin^2(theta), theta measured from a:
+        symmetric front/back, so the light carries away energy but no net momentum.
+        Each charge therefore loses P*dt of kinetic energy with no recoil: its speed
+        is scaled down and its direction of travel is unchanged.
+
+        We drain energy at the Larmor rate instead of using the Abraham-Lorentz force
+        F = (2/3) k q^2 (da/dt) / c^3, which has runaway (self-accelerating) solutions;
+        averaged over the motion the two give the same energy loss.
+
+        Returns (velocities, power). power is the instantaneous Larmor power per charge.
+        A charge can't lose more KE than it has, so a charge momentarily at rest
+        radiates nothing from its KE that step; only energy actually removed is tallied,
+        so KE + PE + radiated stays equal to E0 (up to the integrator's own error).
+        """
+        a2 = np.einsum("ij,ij->i", accelerations, accelerations)
+        power = (2.0 / 3.0) * K_COULOMB * charges**2 * a2 / self.radiation_c**3
+        power[static_status] = 0.0
+
+        ke = 0.5 * masses * np.einsum("ij,ij->i", velocities, velocities)
+        lost = np.minimum(power * dt, ke)
+        scale = np.ones_like(ke)
+        moving = ke > 0
+        scale[moving] = np.sqrt(1.0 - lost[moving] / ke[moving])
+
+        self.radiated_energy += float(np.sum(lost))
+        return velocities * scale[:, None], power
+
     # ----- Force / Acceleration -----
     def get_accelerations(self, positions, velocities, charges, masses, static_status):
         """
@@ -103,14 +145,28 @@ class PhysicsEngine:
         a_tdt = self.get_accelerations(positions_new, velocities, charges, masses, static_status)
 
         # 4. update velocities
-        velocities_new = velocities + 0.5 * (a_t + a_tdt) * dt
+        a_step = 0.5 * (a_t + a_tdt)          # the acceleration this step actually applied
+        velocities_new = velocities + a_step * dt
         self._cached = (positions_new, charges, masses, static_status, a_tdt)
 
-        # 5. write back into objects (skip static)
+        # 5. Larmor radiation (optional): the net acceleration radiates, not each force
+        #    separately, because fields superpose before being squared.
+        #    Positions are untouched, so the cached a(t+dt) stays valid.
+        if self.radiation_c is not None:
+            velocities_new, power = self.apply_radiation(dt, velocities_new, a_step,
+                                                         charges, masses, static_status)
+        else:
+            power = np.zeros(n)
+
+        # 6. write back into objects (skip static)
         for i in range(n):
+            pc = all_charges[i]
+            # radiation state, read by the renderer
+            pc.rad_power = float(power[i])
+            pc.rad_accel = a_step[i].copy()
             if not static_status[i]:
-                all_charges[i].position = positions_new[i]
-                all_charges[i].vel = velocities_new[i]
+                pc.position = positions_new[i]
+                pc.vel = velocities_new[i]
 
     # ----- Pairwise particle collision resolution (internal) -----
     def _resolve_pair_collision(self, p1, p2):

@@ -4,6 +4,7 @@
 
 import pygame 
 import numpy as np
+import colorsys
 from constants_for_all_files import *
 from collections import deque
 
@@ -61,6 +62,10 @@ class PointCharge:
         self.pc_id = pc_id
         self.dragging = False
         self.e = e
+
+        # Larmor radiation state, written by the physics engine each step
+        self.rad_power = 0.0
+        self.rad_accel = np.zeros(2)
 
         # Radius setup
         self.core_radius = 15
@@ -151,6 +156,8 @@ class PointCharge:
         # Always revert to initial state (position and velocity)
         self.position = self.pos_0.copy()
         self.vel = self.vel_0.copy()
+        self.rad_power = 0.0
+        self.rad_accel = np.zeros(2)
         # also reset trail history when resetting particle
         try:
             self.history.clear()
@@ -353,3 +360,67 @@ class PointCharge:
 
         force = force_direction * force_magnitude
         return force
+
+
+# --- RADIATION RENDERING ---
+
+HUE_RED = 0.0           # slowest motion on screen
+HUE_VIOLET = 0.76       # fastest motion on screen (~273 deg, spectral violet)
+OMEGA_DECADES = 4       # hue range spans at most 4 decades of omega below the fastest
+POWER_DECADES = 6       # charges radiating < 1e-6 of the strongest are not drawn
+
+def _log_norm(values, decades):
+    """Map values onto 0..1 by log10, relative to the largest on screen.
+    Logarithmic because Larmor power ~ a^2 ~ 1/r^4 spans many orders of magnitude;
+    a linear scale would leave everything but the strongest at the bottom."""
+    logs = np.log10(values)
+    hi = logs.max()
+    lo = max(logs.min(), hi - decades)
+    if hi - lo < 1e-12:
+        return np.ones_like(logs)       # all equal: they are all "the strongest"
+    return np.clip((logs - lo) / (hi - lo), 0.0, 1.0)
+
+def render_radiation(screen, all_charges):
+    """
+    Draw the Larmor emission pattern of each radiating charge.
+
+    Shape: dP/dOmega ∝ sin^2(theta), theta from the acceleration -> two lobes
+    perpendicular to the net force (none emitted along it).
+
+    Colour: the characteristic frequency of the motion, omega = |a| / |v|
+    (exact for circular motion, where a = v*omega). Real emitted light has this
+    frequency, so faster-turning charges are drawn bluer: red = slowest on screen,
+    violet = fastest. It is a relative scale, not the true colour.
+
+    Size and opacity: relative radiated power (log scale).
+    """
+    radiating = [pc for pc in all_charges
+                 if pc.rad_power > 0 and np.linalg.norm(pc.vel) > 0]
+    if not radiating:
+        return
+
+    power = np.array([pc.rad_power for pc in radiating])
+    omega = np.array([np.linalg.norm(pc.rad_accel) / np.linalg.norm(pc.vel) for pc in radiating])
+    p_norm = _log_norm(power, POWER_DECADES)
+    w_norm = _log_norm(omega, OMEGA_DECADES)
+    p_floor = power.max() * 10.0**-POWER_DECADES
+
+    for pc, p, pn, wn in zip(radiating, power, p_norm, w_norm):
+        if p < p_floor:
+            continue
+        hue = HUE_RED + wn * (HUE_VIOLET - HUE_RED)
+        r, g, b = (int(255 * c) for c in colorsys.hsv_to_rgb(hue, 1.0, 1.0))
+        alpha = int(70 + 150 * pn)
+        lobe = pc.total_radius + 10 + 35 * pn          # pixels
+
+        phi_a = np.arctan2(pc.rad_accel[1], pc.rad_accel[0])
+        size = int(2 * lobe + 4)
+        centre = np.array([size / 2, size / 2])
+        surf = pygame.Surface((size, size), pygame.SRCALPHA)
+        # one polygon per lobe: r(phi) = lobe * sin^2(phi - phi_a), phi_a < phi < phi_a + pi, and the mirror one
+        for start in (phi_a, phi_a + np.pi):
+            phis = np.linspace(start, start + np.pi, 40)
+            radii = lobe * np.sin(phis - phi_a) ** 2
+            pts = centre + np.column_stack((radii * np.cos(phis), radii * np.sin(phis)))
+            pygame.draw.polygon(surf, (r, g, b, alpha), [tuple(pt) for pt in pts])
+        screen.blit(surf, (int(pc.position[0] - size / 2), int(pc.position[1] - size / 2)))

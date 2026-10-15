@@ -34,6 +34,10 @@ dt_slider = GenericSlider(1250, 50, 150, 30,min_val=0.00005, max_val=0.02, initi
                           label="Time Step (dt):", fmt="{:.5f}")
 fps_slider = GenericSlider(1250, 100, 150, 30, min_val=60, max_val=9000, initial_val=100, 
                            label="Max FPS:", fmt="{:.0f}")
+# Larmor radiation: with the real c it is far too weak to see, so c is adjustable (log scale)
+c_slider = LogSlider(1250, 150, 150, 30, min_val=1e2, max_val=C_LIGHT, initial_val=3e4,
+                     label="Speed of light c (px/s):")
+radiation_toggle = BinaryToggle(1250, 210, 80, 30, "Radiation:", initial_state=False)
 
 # engine
 physics_engine = PhysicsEngine()
@@ -129,6 +133,7 @@ while running:
                     # Capture initial energy
                     ke_init, pe_init = physics_engine.compute_energy(all_point_charges)
                     initial_total_energy = ke_init + pe_init
+                    physics_engine.reset_radiation()
                     print("SIMULATION STARTED")
                     print(f"Initial Total Energy: {initial_total_energy:.2e} J")
 
@@ -136,6 +141,8 @@ while running:
             wall_cor_slider.handle_event(event)
             dt_slider.handle_event(event)
             fps_slider.handle_event(event)
+            c_slider.handle_event(event)
+            radiation_toggle.handle_event(event)
 
             # 3. Context Menu Logic
             menu_action = context_menu.handle_event(event)
@@ -274,6 +281,8 @@ while running:
             wall_cor_slider.handle_event(event)
             dt_slider.handle_event(event)
             fps_slider.handle_event(event)
+            c_slider.handle_event(event)
+            radiation_toggle.handle_event(event)
 
             if pause_btn.handle_event(event):
                 sim_state = 0.5 # Literally just pauses the sim
@@ -317,6 +326,9 @@ while running:
     
     # Update wall coefficient
     wall_cor = wall_cor_slider.value 
+
+    # Radiation on/off and the (scaled) speed of light
+    physics_engine.radiation_c = c_slider.real_value if radiation_toggle.state else None
 
     # Update visual scales (Always needed for rendering)
     for pc in all_point_charges:
@@ -373,27 +385,43 @@ while running:
     # Layer 2: Particles (render trails behind particles)
     
     for pc in all_point_charges:
+        pc.render_trails(screen)
+
+    # Layer 2.2: Larmor radiation lobes (behind the particles)
+    if sim_state != 0:
+        render_radiation(screen, all_point_charges)
+
+    for pc in all_point_charges:
         # Only show arrows in setup mode (sim_state == 0)
         if sim_state == 0:
             pc.update_arrow(all_point_charges)
             pc.arrow_display = True
         else:
             pc.arrow_display = False
-        pc.render_trails(screen)
         pc.render(screen)
 
     # Layer 2.5: Energy readout (measured, never corrected)
     if sim_state != 0 and initial_total_energy is not None:
-        total_energy = total_kinetic_energy + total_potential_energy
+        # Radiated energy is counted in the total: light carries it away, it isn't destroyed,
+        # so KE + PE + radiated should stay at E0 (walls/collisions with restitution < 1 still lose energy)
+        radiated = physics_engine.radiated_energy
+        total_energy = total_kinetic_energy + total_potential_energy + radiated
         drift = (total_energy - initial_total_energy) / abs(initial_total_energy) if initial_total_energy else 0.0
         energy_lines = [
-            f"KE     {total_kinetic_energy: .4e} J",
-            f"PE     {total_potential_energy: .4e} J",
-            f"Total  {total_energy: .4e} J",
-            f"(E - E0)/|E0|  {drift: .2e}",
+            (f"KE        {total_kinetic_energy: .4e} J", text_c),
+            (f"PE        {total_potential_energy: .4e} J", text_c),
+            (f"Radiated  {radiated: .4e} J", text_c),
+            (f"Total     {total_energy: .4e} J", text_c),
+            (f"(E - E0)/|E0|  {drift: .2e}", text_c),
         ]
-        for line_no, line in enumerate(energy_lines):
-            screen.blit(energy_font.render(line, True, text_c), (WBT + 10, SH - WBT - 90 + 20 * line_no))
+        if physics_engine.radiation_c is not None and all_point_charges:
+            # The Larmor formula used is the non-relativistic one: it needs v << c
+            v_over_c = max(np.linalg.norm(pc.vel) for pc in all_point_charges) / physics_engine.radiation_c
+            energy_lines.append((f"max v/c  {v_over_c:.3f}" + ("  (Larmor needs v << c)" if v_over_c > 0.3 else ""),
+                                 (180, 0, 0) if v_over_c > 0.3 else text_c))
+        top = SH - 70 - 20 * len(energy_lines)     # stacked above the Reset button
+        for line_no, (line, colour) in enumerate(energy_lines):
+            screen.blit(energy_font.render(line, True, colour), (WBT + 10, top + 20 * line_no))
 
     # Layer 3: GUI (State Dependent)
 
@@ -408,12 +436,16 @@ while running:
         create_form.render(screen)
         dt_slider.render(screen)
         fps_slider.render(screen)
+        c_slider.render(screen)
+        radiation_toggle.render(screen)
 
     elif sim_state == 1:
         pause_btn.render(screen)
         trails_toggle.render(screen)
         dt_slider.render(screen)
         fps_slider.render(screen)
+        c_slider.render(screen)
+        radiation_toggle.render(screen)
 
     elif sim_state == 0.5:
         unpause_btn.render(screen)
