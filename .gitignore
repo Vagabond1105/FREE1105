@@ -1,0 +1,7 @@
+__pycache__/
+.vscode/
+.venv/
+.ipynb_checkpoints/
+# stage files written by the notebook's %%writefile cells (regenerated when it runs)
+*_jypter*.py
+*_jupyter*.py
