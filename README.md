@@ -156,31 +156,37 @@ The last pass made the repository something other people can trust and run: a te
 
 Every pair of charges interacts through a softened Coulomb force:
 
-$$\vec F_{ij} = k_e\, q_i q_j \, \frac{\vec r_i - \vec r_j}{\left(|\vec r_i - \vec r_j|^2 + \varepsilon^2\right)^{3/2}}, \qquad \varepsilon = 400\ \text{px}.$$
+```math
+\vec F_{ij} = k_e\, q_i q_j \, \frac{\vec r_i - \vec r_j}{\left(|\vec r_i - \vec r_j|^2 + \varepsilon^2\right)^{3/2}}, \qquad \varepsilon = 400\ \text{px}.
+```
 
-This force is exactly $-\nabla$ of the softened potential energy
+This force is exactly $`-\nabla`$ of the softened potential energy
 
-$$U = \sum_{i<j} \frac{k_e\, q_i q_j}{\sqrt{r_{ij}^2 + \varepsilon^2}},$$
+```math
+U = \sum_{i<j} \frac{k_e\, q_i q_j}{\sqrt{r_{ij}^2 + \varepsilon^2}},
+```
 
-so the force and the energy readout always describe the same physics (a test checks this by finite differences). Softening removes the $r \to 0$ singularity. Without it, a close pass between opposite charges produces arbitrarily large accelerations that no fixed time step can resolve. The technique comes from gravitational N-body codes, and 400 px was chosen empirically by watching the energy during close encounters.
+so the force and the energy readout always describe the same physics (a test checks this by finite differences). Softening removes the $`r \to 0`$ singularity. Without it, a close pass between opposite charges produces arbitrarily large accelerations that no fixed time step can resolve. The technique comes from gravitational N-body codes, and 400 px was chosen empirically by watching the energy during close encounters.
 
 All pairs are evaluated in one NumPy broadcast. The cost is O(N²), which is fine for tens of charges.
 
 ### 2. Units
 
-SI constants ($k_e$, $e$, $m_e$, $m_p$, $c$) with **1 px treated as 1 m**. The creation form defaults to 1 C and 1 kg. These magnitudes are wildly unphysical (1 C is an enormous charge), but they give motion on a human timescale.
+SI constants ($`k_e`$, $`e`$, $`m_e`$, $`m_p`$, $`c`$) with **1 px treated as 1 m**. The creation form defaults to 1 C and 1 kg. These magnitudes are wildly unphysical (1 C is an enormous charge), but they give motion on a human timescale.
 
 ### 3. Time integration: Velocity-Verlet
 
-$$x_{n+1} = x_n + v_n \Delta t + \tfrac{1}{2} a_n \Delta t^2, \qquad v_{n+1} = v_n + \tfrac{1}{2}(a_n + a_{n+1}) \Delta t$$
+```math
+x_{n+1} = x_n + v_n \Delta t + \tfrac{1}{2} a_n \Delta t^2, \qquad v_{n+1} = v_n + \tfrac{1}{2}(a_n + a_{n+1}) \Delta t
+```
 
-Velocity-Verlet is **symplectic**: it preserves the phase-space structure of Hamiltonian mechanics. It exactly conserves a "shadow Hamiltonian" that differs from the true energy by $O(\Delta t^2)$, so the energy error **oscillates inside a bounded band and does not drift**, even over very long runs. RK4 has higher order but no such guarantee, which is why molecular dynamics codes (GROMACS, LAMMPS) and N-body codes use Verlet-type schemes. Reflect on that for a second. A lower-order method wins because it respects the structure of the problem.
+Velocity-Verlet is **symplectic**: it preserves the phase-space structure of Hamiltonian mechanics. It exactly conserves a "shadow Hamiltonian" that differs from the true energy by $`O(\Delta t^2)`$, so the energy error **oscillates inside a bounded band and does not drift**, even over very long runs. RK4 has higher order but no such guarantee, which is why molecular dynamics codes (GROMACS, LAMMPS) and N-body codes use Verlet-type schemes. Reflect on that for a second. A lower-order method wins because it respects the structure of the problem.
 
-The engine evaluates forces once per step: $a_{n+1}$ is cached and reused as the next step's $a_n$, unless collisions, walls or dragging moved a particle in between.
+The engine evaluates forces once per step: $`a_{n+1}`$ is cached and reused as the next step's $`a_n`$, unless collisions, walls or dragging moved a particle in between.
 
 ### 4. Collisions
 
-- **Particle-particle:** an impulse along the contact normal, using the reduced mass and an effective restitution $e = \min(e_1, e_2)$. A positional correction of 80% of the overlap then separates the pair without overshooting.
+- **Particle-particle:** an impulse along the contact normal, using the reduced mass and an effective restitution $`e = \min(e_1, e_2)`$. A positional correction of 80% of the overlap then separates the pair without overshooting.
 - **Walls:** the normal velocity is reflected and multiplied by the wall restitution (slider).
 - With restitution below 1, energy is lost, as it should be.
 
@@ -188,31 +194,37 @@ The engine evaluates forces once per step: $a_{n+1}$ is cached and reused as the
 
 **Power.** A non-relativistic accelerating charge radiates
 
-$$P = \frac{q^2 a^2}{6\pi\varepsilon_0 c^3} = \frac{2}{3}\,\frac{k_e\, q^2 a^2}{c^3}.$$
+```math
+P = \frac{q^2 a^2}{6\pi\varepsilon_0 c^3} = \frac{2}{3}\,\frac{k_e\, q^2 a^2}{c^3}.
+```
 
-Here $a$ is the **net** acceleration. Fields superpose before they are squared, so a charge pulled equally in two opposite directions doesn't radiate. Neutral and static charges never radiate.
+Here $`a`$ is the **net** acceleration. Fields superpose before they are squared, so a charge pulled equally in two opposite directions doesn't radiate. Neutral and static charges never radiate.
 
 **Direction.** The angular distribution is
 
-$$\frac{dP}{d\Omega} \propto \sin^2\theta,$$
+```math
+\frac{dP}{d\Omega} \propto \sin^2\theta,
+```
 
 with θ measured from the acceleration. No light goes along the force; the maximum is perpendicular to it. In 3D this is a doughnut around the acceleration axis.
 
-**What you see.** Each radiating charge sends out pairs of **90° arcs perpendicular to the net force**, one on each side, that spread outward as wavefronts. The 90° is not decoration: it is the half-power width of the pattern ($\sin^2\theta \ge \tfrac12$ for θ between 45° and 135°). Brightness along each arc follows the pattern, brightest in the middle and fading to the edges. A wavefront stays centred on the point where it was emitted, because light does not follow its source. A charge on a circular orbit is accelerated towards the centre, so it sends light forward and backward along its path and leaves a wake of arcs. The arcs travel at a display speed of 4000 px per simulated second; the real c would cross the screen in about 5 μs.
+**What you see.** Each radiating charge sends out pairs of **90° arcs perpendicular to the net force**, one on each side, that spread outward as wavefronts. The 90° is not decoration: it is the half-power width of the pattern ($`\sin^2\theta \ge \tfrac12`$ for θ between 45° and 135°). Brightness along each arc follows the pattern, brightest in the middle and fading to the edges. A wavefront stays centred on the point where it was emitted, because light does not follow its source. A charge on a circular orbit is accelerated towards the centre, so it sends light forward and backward along its path and leaves a wake of arcs. The arcs travel at a display speed of 4000 px per simulated second; the real c would cross the screen in about 5 μs.
 
-**Energy loss.** The pattern is front-back symmetric, so the light carries away energy but **no net momentum**. Each step, a radiating charge loses $P\,\Delta t$ of kinetic energy: its speed is scaled down and its direction is unchanged. This energy drain is used instead of the Abraham-Lorentz self-force $\frac{2}{3}k_e q^2 \dot{\vec a}/c^3$, which has unphysical runaway solutions. Averaged over the motion, both give the same energy loss. The radiated energy is tallied, and the readout shows
+**Energy loss.** The pattern is front-back symmetric, so the light carries away energy but **no net momentum**. Each step, a radiating charge loses $`P\,\Delta t`$ of kinetic energy: its speed is scaled down and its direction is unchanged. This energy drain is used instead of the Abraham-Lorentz self-force $`\frac{2}{3}k_e q^2 \dot{\vec a}/c^3`$, which has unphysical runaway solutions. Averaged over the motion, both give the same energy loss. The radiated energy is tallied, and the readout shows
 
-$$KE + PE + E_{\text{rad}} = E_0,$$
+```math
+KE + PE + E_{\text{rad}} = E_0,
+```
 
 so energy bookkeeping remains a consistency check. Energy is a trust; the code returns every joule of it, and the readout keeps the receipts.
 
-**Colour and rhythm.** Real emitted light has the frequency of the motion that produces it. For circular motion that frequency is exactly $\omega = a/v$, and the ratio is a good estimate in general. Each charge's wavefronts are coloured by $\omega$ on a log scale relative to the other charges on screen: the slowest-turning charge is **red** and the fastest is **violet**, following the visible spectrum. The ripple rate is **one to one** with the motion: one pair of arcs per cycle, every $T = 2\pi/\omega$ of simulated time. Twice the frequency gives twice the ripples and half the on-screen wavelength ($\lambda = v_{\text{display}} T$). Brightness shows the relative radiated **power**, also on a log scale, because $P \propto a^2$ spans many orders of magnitude and a linear scale would leave everything but the strongest emitter invisible.
+**Colour and rhythm.** Real emitted light has the frequency of the motion that produces it. For circular motion that frequency is exactly $`\omega = a/v`$, and the ratio is a good estimate in general. Each charge's wavefronts are coloured by $`\omega`$ on a log scale relative to the other charges on screen: the slowest-turning charge is **red** and the fastest is **violet**, following the visible spectrum. The ripple rate is **one to one** with the motion: one pair of arcs per cycle, every $`T = 2\pi/\omega`$ of simulated time. Twice the frequency gives twice the ripples and half the on-screen wavelength ($`\lambda = v_{\text{display}} T`$). Brightness shows the relative radiated **power**, also on a log scale, because $`P \propto a^2`$ spans many orders of magnitude and a linear scale would leave everything but the strongest emitter invisible.
 
-**Strength.** c is the real $3\times10^8$ m/s. At that value, charges moving at a few thousand px/s radiate almost nothing: about $10^{-15}$ of the orbital energy per orbit, so orbits don't visibly decay. The wavefronts are drawn on a relative scale, so they still show where and how strongly each charge radiates. The readout tallies the radiated energy and shows the largest $v/c$, which turns red above 0.3 because the formula assumes $v \ll c$. The tests lower c on purpose, to make the energy loss large enough to measure.
+**Strength.** c is the real $`3\times10^8`$ m/s. At that value, charges moving at a few thousand px/s radiate almost nothing: about $`10^{-15}`$ of the orbital energy per orbit, so orbits don't visibly decay. The wavefronts are drawn on a relative scale, so they still show where and how strongly each charge radiates. The readout tallies the radiated energy and shows the largest $`v/c`$, which turns red above 0.3 because the formula assumes $`v \ll c`$. The tests lower c on purpose, to make the energy loss large enough to measure.
 
 ### 6. Potential heatmap and 3D surface
 
-Both show the scalar potential $V(x,y) = \sum_i k_e q_i / r_i$, with $r_i$ held at the particle's radius inside its disc.
+Both show the scalar potential $`V(x,y) = \sum_i k_e q_i / r_i`$, with $`r_i`$ held at the particle's radius inside its disc.
 
 - **2D heatmap:** computed on a ¼-resolution grid. Positive potential is darker, negative is lighter, zero is mid-grey.
 - **3D surface:** height and grey level encode the normalised V, with a blue wireframe and the charges marked (red +, blue −).
@@ -228,20 +240,20 @@ This is a teaching-grade classical model. The list is deliberately thorough, and
 
 | Simplification | Real physics | Consequence here |
 |---|---|---|
-| **Electrostatic forces only.** No magnetic force between moving charges | Moving charges make magnetic fields, and the force is the full Lorentz force $q(\vec E + \vec v\times\vec B)$. The magnetic interaction is smaller by about $(v/c)^2$ | With the real c, $v/c \sim 10^{-5}$, so the error is negligible |
-| **Instantaneous action at a distance** | Fields propagate at c. Each charge feels the others where they were at the *retarded* time (Liénard-Wiechert potentials) | Same order as above: fine for $v \ll c$ |
+| **Electrostatic forces only.** No magnetic force between moving charges | Moving charges make magnetic fields, and the force is the full Lorentz force $`q(\vec E + \vec v\times\vec B)`$. The magnetic interaction is smaller by about $`(v/c)^2`$ | With the real c, $`v/c \sim 10^{-5}`$, so the error is negligible |
+| **Instantaneous action at a distance** | Fields propagate at c. Each charge feels the others where they were at the *retarded* time (Liénard-Wiechert potentials) | Same order as above: fine for $`v \ll c`$ |
 | **3D Coulomb law in a 2D world** | Genuine 2D electrostatics has a logarithmic potential and a 1/r force | These are really 3D charges confined to a plane. The radiation arcs are a slice of the 3D doughnut |
-| **Softening, ε = 400 px** | Point charges obey $1/r^2$ down to (at least) nuclear scales | ε is comparable to the screen size, so this is a big modification. At 300 px the force is only **22%** of the true Coulomb value, and at short range it flattens out instead of diverging. The motion is qualitatively Coulomb-like but quantitatively softer |
+| **Softening, ε = 400 px** | Point charges obey $`1/r^2`$ down to (at least) nuclear scales | ε is comparable to the screen size, so this is a big modification. At 300 px the force is only **22%** of the true Coulomb value, and at short range it flattens out instead of diverging. The motion is qualitatively Coulomb-like but quantitatively softer |
 | **Conducting walls aren't modelled** | A real conducting wall induces image charges and attracts nearby charges | Walls only reflect particles mechanically |
 
 ### Radiation
 
 | Simplification | Real physics | Consequence here |
 |---|---|---|
-| **Non-relativistic Larmor** | Liénard's relativistic formula grows as $\gamma^6$, and at high speed the emission is beamed forward along $\vec v$ (the synchrotron "headlight") | Valid only while $v \ll c$. The readout warns above $v/c = 0.3$ |
+| **Non-relativistic Larmor** | Liénard's relativistic formula grows as $`\gamma^6`$, and at high speed the emission is beamed forward along $`\vec v`$ (the synchrotron "headlight") | Valid only while $`v \ll c`$. The readout warns above $`v/c = 0.3`$ |
 | **Energy drain instead of a self-force** | Radiation reaction is a subtle, still-debated problem (Abraham-Lorentz-Dirac, Landau-Lifshitz) | Correct energy loss rate, but the instantaneous force direction isn't modelled. A charge momentarily at rest has no KE to lose that step, so that step's emission isn't tallied |
 | **Wavefronts are drawn, not simulated** | Light travels at c and its fields act on other charges | The arcs picture the emission pattern at a display speed. They carry no field |
-| **Collisions don't radiate** | A sudden stop radiates strongly (bremsstrahlung: the X-rays in an X-ray tube) | Collision and wall impulses are instantaneous, so $a$ would be infinite. They are excluded |
+| **Collisions don't radiate** | A sudden stop radiates strongly (bremsstrahlung: the X-rays in an X-ray tube) | Collision and wall impulses are instantaneous, so $`a`$ would be infinite. They are excluded |
 | **Emitted light doesn't interact with anything** | Radiation pushes on other charges (absorption, scattering) | Energy simply leaves the system |
 | **Colour is relative** | A charge circling at ω = 20 rad/s emits ~3 Hz radio waves, nowhere near visible light | Red to violet ranks the charges by frequency. It is not the true colour |
 | **Classical radiation, no photons** | Light comes in quanta, and atoms have stable ground states | See below |
@@ -249,7 +261,7 @@ This is a teaching-grade classical model. The list is deliberately thorough, and
 ### Things only quantum mechanics fixes
 
 - **The classical atom collapses.** A classical electron orbiting a proton at the Bohr radius radiates its energy away and spirals into the nucleus in about **1.6×10⁻¹¹ s**. This was one of the main reasons physics needed the Bohr model and then quantum mechanics. The radiation here is exactly that classical physics, but at the real c and with slow, metre-scale orbits the collapse takes far too long to watch.
-- **Opposite charges should collapse even without radiation.** Point charges with a pure $1/r^2$ attraction meet in finite time. Two artificial things stop it here: softening, and treating charges as hard discs that bounce. In reality the uncertainty principle and the Pauli exclusion principle keep atoms from collapsing.
+- **Opposite charges should collapse even without radiation.** Point charges with a pure $`1/r^2`$ attraction meet in finite time. Two artificial things stop it here: softening, and treating charges as hard discs that bounce. In reality the uncertainty principle and the Pauli exclusion principle keep atoms from collapsing.
 
 ### Mechanics and numerics
 
@@ -270,17 +282,17 @@ Every number below is produced by [`tests/test_physics.py`](tests/test_physics.p
 
 | Test | Measured result |
 |---|---|
-| Energy conservation, radiation off, 50 orbits | $\lvert E - E_0\rvert / \lvert E_0\rvert < 1.2\times10^{-9}$. Mean error $6.2\times10^{-10}$ over the first orbit and $5.0\times10^{-10}$ over the last: **no drift** |
+| Energy conservation, radiation off, 50 orbits | $`\lvert E - E_0\rvert / \lvert E_0\rvert < 1.2\times10^{-9}`$. Mean error $`6.2\times10^{-10}`$ over the first orbit and $`5.0\times10^{-10}`$ over the last: **no drift** |
 | Circular orbit, 10 orbits | Radius stays within 0.1% of 300 px |
-| Force vs potential | Force equals $-\nabla U$ (central finite differences) to 6 significant figures |
-| Momentum, free pair of charges | Conserved to $10^{-6}$ |
-| Radiated energy vs analytic Larmor, c = 10⁵ px/s, 20 orbits | Simulated $4.1354\times10^4$ J vs analytic $P \cdot 20T = 4.1342\times10^4$ J (**0.03%**) |
-| Energy bookkeeping with radiation, c = 3×10⁴ px/s, 20 orbits | Orbit decays from 300 to 253 px, and $\lvert KE + PE + E_{\text{rad}} - E_0\rvert / \lvert E_0\rvert < 4.6\times10^{-6}$ |
-| Radiation at the real c vs radiation off, 5 orbits | Positions agree to $6\times10^{-10}$ px |
+| Force vs potential | Force equals $`-\nabla U`$ (central finite differences) to 6 significant figures |
+| Momentum, free pair of charges | Conserved to $`10^{-6}`$ |
+| Radiated energy vs analytic Larmor, c = 10⁵ px/s, 20 orbits | Simulated $`4.1354\times10^4`$ J vs analytic $`P \cdot 20T = 4.1342\times10^4`$ J (**0.03%**) |
+| Energy bookkeeping with radiation, c = 3×10⁴ px/s, 20 orbits | Orbit decays from 300 to 253 px, and $`\lvert KE + PE + E_{\text{rad}} - E_0\rvert / \lvert E_0\rvert < 4.6\times10^{-6}`$ |
+| Radiation at the real c vs radiation off, 5 orbits | Positions agree to $`6\times10^{-10}`$ px |
 | Neutral and static charges | Never radiate |
 | Collisions | Elastic: momentum and KE conserved. Head-on with e = 0.5: each rebounds at half speed. Walls: normal velocity × restitution |
 | Wavefronts | Exactly one pair per orbit |
-| 3D surface potential | Matches $\sum_i k_e q_i / r_i$ |
+| 3D surface potential | Matches $`\sum_i k_e q_i / r_i`$ |
 
 During the October 2026 review, the vectorised forces were also checked against the original loop code: identical apart from one pair inside the old 20 px clamp, and about 33× faster at N = 20. The numbers do not lie, and neither does this table.
 
@@ -306,8 +318,8 @@ FREE1105/
 
 **Each frame while running:**
 
-1. **Verlet position update**, using the cached $a_n$.
-2. **New forces**, giving $a_{n+1}$.
+1. **Verlet position update**, using the cached $`a_n`$.
+2. **New forces**, giving $`a_{n+1}`$.
 3. **Verlet velocity update.**
 4. **Larmor energy drain**, if radiation is on.
 5. **Wall collisions**, then **particle collisions**.
@@ -333,8 +345,8 @@ FREE1105/
 
 | Issue found | Fix |
 |---|---|
-| In fully elastic mode, velocities were rescaled every step to force the total energy back to $E_0$, so the conservation check was true by construction | Rescaling removed. The energy is displayed live, as measured |
-| The 2D heatmap summed signed $kq/r^2$, which is neither the potential nor the field strength | The heatmap now shows the potential $kq/r$, the same quantity as Phase 4 |
+| In fully elastic mode, velocities were rescaled every step to force the total energy back to $`E_0`$, so the conservation check was true by construction | Rescaling removed. The energy is displayed live, as measured |
+| The 2D heatmap summed signed $`kq/r^2`$, which is neither the potential nor the field strength | The heatmap now shows the potential $`kq/r`$, the same quantity as Phase 4 |
 | Forces were evaluated 3× per step (one result discarded) in pure-Python double loops | One evaluation per step, vectorised: about 33× faster at 20 charges |
 | A 20 px minimum-distance clamp made the force and the potential disagree at close range | Clamp removed. Softening alone regularises the force, consistently |
 | Matplotlib ran in a background thread, which isn't thread-safe and can crash | The visualiser runs as a separate process |
@@ -353,11 +365,11 @@ FREE1105/
 
 None of these are planned. They are what would come next if someone picked it up.
 
-- **Magnetism:** velocity-dependent (Darwin) forces and $\vec v \times \vec B$.
+- **Magnetism:** velocity-dependent (Darwin) forces and $`\vec v \times \vec B`$.
 - **Retardation:** fields propagating at c (Liénard-Wiechert), so the wavefronts become real fields rather than a picture.
 - **Rigid bodies (the original phase 3):** charged triangles and rectangles with torque from non-uniform charge distributions; strings.
 - **Bremsstrahlung** on collisions, given finite-duration contacts.
-- **Barnes-Hut** $O(N\log N)$ forces, or a GPU, for large N.
+- **Barnes-Hut** $`O(N\log N)`$ forces, or a GPU, for large N.
 
 ## License
 
