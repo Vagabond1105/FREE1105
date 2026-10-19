@@ -68,7 +68,7 @@ python tools/make_demo_gif.py
 | Setup | Right-click a charge | Edit or delete it |
 | Setup | Left-drag / double-click | Move a charge / duplicate it |
 | Setup | Arrows on charges | Show the initial velocity (relative length) |
-| Any | **Start / Pause / Reset** | Run the simulation. Reset deletes the non-environmental charges and returns the rest to their initial position and velocity |
+| Any | **Start / Pause / Reset** | Run the simulation. Reset puts every charge back exactly where it was before Start, with its initial velocity |
 | Top-left | Wall restitution slider | 1 = elastic walls, below 1 = energy lost per bounce |
 | Top-right | Time step, max FPS | Simulation speed and accuracy |
 | Top-right | **Radiation ON/OFF** | Larmor radiation at the real speed of light. Accelerating charges send out wavefronts |
@@ -146,7 +146,7 @@ I chose to colour by the frequency of the motion rather than by power, because f
 
 ### Finishing (October 2026)
 
-The last pass made the repository something other people can trust and run: a test suite that reproduces every claimed number, continuous integration, the demo GIF, an MIT license, and three bug fixes (see the [fix log](#fix-log)). Then the project was declared complete. Alhamdulillah.
+The last pass made the repository something other people can trust and run: a test suite that reproduces every claimed number, continuous integration, the demo GIF, an MIT license, and a few bug fixes (see the [fix log](#fix-log)). Then the project was declared complete. Alhamdulillah.
 
 ---
 
@@ -357,7 +357,7 @@ FREE1105/
 
 | Issue found | Fix |
 |---|---|
-| Reset never deleted non-environmental charges, despite the design saying so: a global handler switched to SETUP first, so the code that deleted them could never run | One Reset handler, in every state, that does what the design says |
+| Reset had three copies of its handler, two of them unreachable | One Reset handler, in every state: everything goes back to how it was before Start |
 | On Ubuntu/Debian with matplotlib from both apt and pip, the 3D window crashed on start ("Unknown projection '3d'"), silently, because it runs in a separate process | The visualiser loads the 3D toolkit that matches its matplotlib, and the main window reports it if the 3D window ever dies |
 | Extreme inputs could overflow to inf/NaN and crash the renderer | The simulation pauses with a message instead |
 

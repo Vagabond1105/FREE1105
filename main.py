@@ -88,12 +88,10 @@ while running:
             running = False
         
         # 2. GLOBAL: Reset Button (Works in ANY state to save you)
-        # Deletes the non-environmental charges and returns the rest to their initial
-        # position and velocity. This is the only Reset handler: it sets sim_state to 0,
-        # so the state-specific branches below never see the click.
+        # Puts everything back exactly as it was before Start: every charge returns to its
+        # initial position and velocity, and nothing is deleted.
         if reset_btn.handle_event(event):
             sim_state = 0 # Force back to SETUP
-            all_point_charges = [pc for pc in all_point_charges if pc.environmental]
             for pc in all_point_charges:
                 pc.reset()
             selected_charge = None
