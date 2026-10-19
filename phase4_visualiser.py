@@ -109,7 +109,15 @@ class Phase4Visualiser:
         charges at most once per update_interval; if the window was closed,
         this quietly does nothing.
         """
-        if self._proc is None or self._proc.poll() is not None:
+        if self._proc is None:
+            return
+        if self._proc.poll() is not None:
+            if self._proc.returncode != 0:
+                # closing the window exits cleanly (0); anything else is a crash, whose
+                # traceback the child has already printed to this terminal
+                print("The 3D potential window stopped with an error (see above). "
+                      "The 2D simulation carries on without it.")
+            self._proc = None
             return
         now = time.time()
         if now - self._last_sent < self.update_interval:
@@ -178,7 +186,7 @@ def _run_window(grid_res, update_interval):
 
     plt.ion()
     fig = plt.figure(figsize=(8, 6), facecolor='#1a1a2e')
-    fig.canvas.manager.set_window_title("FREE1105 — Phase 4: Potential Surface")
+    fig.canvas.manager.set_window_title("FREE1105: Potential Surface (Phase 4)")
     ax = fig.add_subplot(111, projection='3d')
     _style_axes(ax)
 

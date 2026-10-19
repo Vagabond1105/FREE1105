@@ -29,8 +29,8 @@ class PhysicsEngine:
         self._cached = None
 
         # Larmor radiation. None = off; otherwise the speed of light in px/s.
-        # Lowering c is how the effect is made visible: with the real c the
-        # radiated power of a slow charge is negligibly small.
+        # The app uses the real c. The tests lower it, because the radiated power
+        # scales as 1/c^3 and is otherwise too small to measure.
         self.radiation_c = None
         self.radiated_energy = 0.0   # running total of energy carried away by light (J)
 
@@ -141,7 +141,7 @@ class PhysicsEngine:
                 positions_new[i] = positions[i]
 
         # 3. compute accelerations at new positions a(t+dt)
-        # Note: velocities passed here are still v(t) — that's fine for force calc
+        # Note: velocities passed here are still v(t), that's fine for force calc
         a_tdt = self.get_accelerations(positions_new, velocities, charges, masses, static_status)
 
         # 4. update velocities
@@ -259,7 +259,7 @@ class PhysicsEngine:
 
     def handle_wall_collisions(self, all_charges, wall_cor):
         """
-        Boundary collisions — inverts velocity component and multiplies by wall_cor (coefficient).
+        Boundary collisions: inverts velocity component and multiplies by wall_cor (coefficient).
         Keeps particles inside WALL_INNER_RECT (assumes pygame Rect-like object).
         """
         for pc in all_charges:

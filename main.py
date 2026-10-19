@@ -54,6 +54,9 @@ LAST_CLICK_MS = 400  # max ms between clicks to consider a double-click
 last_click_time = 0
 last_click_pc_id = None
 
+# Set when the integration overflowed (see the physics update); shown in the readout
+numerics_blew_up = False
+
 # Energy tracking
 total_kinetic_energy = 0.0
 total_potential_energy = 0.0
@@ -85,11 +88,19 @@ while running:
             running = False
         
         # 2. GLOBAL: Reset Button (Works in ANY state to save you)
+        # Deletes the non-environmental charges and returns the rest to their initial
+        # position and velocity. This is the only Reset handler: it sets sim_state to 0,
+        # so the state-specific branches below never see the click.
         if reset_btn.handle_event(event):
             sim_state = 0 # Force back to SETUP
-            # Reset all charges to initial positions and velocities
+            all_point_charges = [pc for pc in all_point_charges if pc.environmental]
             for pc in all_point_charges:
                 pc.reset()
+            selected_charge = None
+            context_menu.active = False
+            create_form.active = False
+            radiation_renderer.clear()
+            numerics_blew_up = False
             print("SIMULATION RESET")
 
         # --- C. STATE SPECIFIC EVENTS ---
@@ -285,15 +296,6 @@ while running:
             if pause_btn.handle_event(event):
                 sim_state = 0.5 # Literally just pauses the sim
 
-            elif reset_btn.handle_event(event):
-                sim_state = 0
-
-                # keep only environmental charges and reverts everything to their initial state
-
-                all_point_charges = [pc for pc in all_point_charges if pc.environmental]
-                for pc in all_point_charges:
-                    pc.reset()
-
             # Trails toggle (only active in running state)
             if trails_toggle.handle_event(event):
                 # handle_event already toggles internal state; when turned off, clear existing trails
@@ -310,15 +312,6 @@ while running:
             # Paused State - Listen for Unpause from same button or Reset
             if unpause_btn.handle_event(event):
                 sim_state = 1 # Resume Simulation
-
-            elif reset_btn.handle_event(event):
-                sim_state = 0
-
-                # keep only environmental charges and reverts everything to their initial state
-
-                all_point_charges = [pc for pc in all_point_charges if pc.environmental]
-                for pc in all_point_charges:
-                    pc.reset()
 
     # --- D. LOGIC UPDATES (General) ---
     
@@ -342,6 +335,19 @@ while running:
         # 2. Handle collisions AFTER integration
         physics_engine.handle_wall_collisions(all_point_charges, wall_cor)
         physics_engine.handle_particle_collisions(all_point_charges)
+
+        # Extreme inputs (huge charges, tiny masses, a big dt) can overflow to inf/NaN.
+        # Pause instead of crashing in the renderer; Reset restores the initial state.
+        if not all(np.all(np.isfinite(pc.position)) and np.all(np.isfinite(pc.vel))
+                   for pc in all_point_charges):
+            sim_state = 0.5
+            numerics_blew_up = True
+            print("Simulation paused: the numbers overflowed. Try a smaller dt, or less extreme "
+                  "charges and masses, then press Reset.")
+            for pc in all_point_charges:
+                if not (np.all(np.isfinite(pc.position)) and np.all(np.isfinite(pc.vel))):
+                    pc.position = np.nan_to_num(pc.position, nan=SW / 2, posinf=SW / 2, neginf=SW / 2)
+                    pc.vel = np.zeros(2)
 
         # Emit and move the radiation wavefronts (in simulated time, one ripple per cycle of the motion)
         radiation_renderer.update(all_point_charges, dt)
@@ -420,6 +426,8 @@ while running:
             v_over_c = max(np.linalg.norm(pc.vel) for pc in all_point_charges) / physics_engine.radiation_c
             energy_lines.append((f"max v/c  {v_over_c:.3f}" + ("  (Larmor needs v << c)" if v_over_c > 0.3 else ""),
                                  (180, 0, 0) if v_over_c > 0.3 else text_c))
+        if numerics_blew_up:
+            energy_lines.append(("Numbers overflowed: paused. Press Reset.", (180, 0, 0)))
         top = SH - 70 - 20 * len(energy_lines)     # stacked above the Reset button
         for line_no, (line, colour) in enumerate(energy_lines):
             screen.blit(energy_font.render(line, True, colour), (WBT + 10, top + 20 * line_no))

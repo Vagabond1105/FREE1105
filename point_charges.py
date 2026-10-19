@@ -159,6 +159,7 @@ class PointCharge:
         self.vel = self.vel_0.copy()
         self.rad_power = 0.0
         self.rad_accel = np.zeros(2)
+        self.rad_timer = 0.0
         # also reset trail history when resetting particle
         try:
             self.history.clear()
