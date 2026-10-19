@@ -160,7 +160,7 @@ $$\vec{F}_{ij} = k_e q_i q_j \frac{\vec{r}_i - \vec{r}_j}{\left( \left| \vec{r}_
 
 This force is exactly $-\nabla$ of the softened potential energy  
 
-$$U = \sum_{i<j} \frac{k_e\, q_i q_j}{\sqrt{r_{ij}^2 + \varepsilon^2}}.$$
+$$U = \sum_{i < j} \frac{k_e q_i q_j}{\sqrt{r_{ij}^2 + \varepsilon^2}}$$
 
 so the force and the energy readout always describe the same physics (a test checks this by finite differences). Softening removes the $`r \to 0`$ singularity. Without it, a close pass between opposite charges produces arbitrarily large accelerations that no fixed time step can resolve. The technique comes from gravitational N-body codes, and 400 px was chosen empirically by watching the energy during close encounters.
 
