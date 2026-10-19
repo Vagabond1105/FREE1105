@@ -156,7 +156,7 @@ The last pass made the repository something other people can trust and run: a te
 
 Every pair of charges interacts through a softened Coulomb force:  
 
-$$\vec F_{ij} = k_e\, q_i q_j \, \frac{\vec r_i - \vec r_j}{\left(|\vec r_i - \vec r_j|^2 + \varepsilon^2\right)^{3/2}}, \qquad \varepsilon = 400\ \text{px}.$$  
+$$\vec{F}_{ij} = k_e q_i q_j \frac{\vec{r}_i - \vec{r}_j}{\left( \left| \vec{r}_i - \vec{r}_j \right|^2 + \varepsilon^2 \right)^{3/2}}, \qquad \varepsilon = 400 \text{ px}$$
 
 This force is exactly $-\nabla$ of the softened potential energy  
 
