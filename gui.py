@@ -32,6 +32,9 @@ class ResetButton:
         if event.type == pygame.MOUSEMOTION:
             self.hovered = self.rect.collidepoint(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # test where the click landed, not the hover flag: the flag can be stale
+            # (a button stops getting mouse motion while its state isn't on screen)
+            self.hovered = self.rect.collidepoint(event.pos)
             if self.hovered:
                 return True
         return False
@@ -56,6 +59,9 @@ class StartButton:
         if event.type == pygame.MOUSEMOTION:
             self.hovered = self.rect.collidepoint(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # test where the click landed, not the hover flag: the flag can be stale
+            # (a button stops getting mouse motion while its state isn't on screen)
+            self.hovered = self.rect.collidepoint(event.pos)
             if self.hovered:
                 return True
         return False
@@ -82,6 +88,9 @@ class PauseButton:
         if event.type == pygame.MOUSEMOTION:
             self.hovered = self.rect.collidepoint(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # test where the click landed, not the hover flag: the flag can be stale
+            # (a button stops getting mouse motion while its state isn't on screen)
+            self.hovered = self.rect.collidepoint(event.pos)
             if self.hovered:
                 return True
         return False

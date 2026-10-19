@@ -19,7 +19,7 @@ A 2D classical electrodynamics sandbox, written from scratch in Python. You plac
 - **Larmor radiation**, checked against the analytic formula to 0.03%, with full energy bookkeeping: KE + PE + radiated = E₀.
 - **Impulse-based collisions** between particles and with walls, with adjustable restitution.
 - **A live potential heatmap**, plus a **3D potential surface** in its own window.
-- **16 automated tests** that rerun every number in the [Verification](#verification) section on every push.
+- **19 automated tests** that rerun every number in the [Verification](#verification) section, and click through Start, Pause, Reset and dragging in the real app, on every push.
 - **An honest list of everything the model gets wrong** compared with real physics. It is long. That is the point.
 
 ## Contents
@@ -68,7 +68,7 @@ python tools/make_demo_gif.py
 | Setup | Right-click a charge | Edit or delete it |
 | Setup | Left-drag / double-click | Move a charge / duplicate it |
 | Setup | Arrows on charges | Show the initial velocity (relative length) |
-| Any | **Start / Pause / Reset** | Run the simulation. Reset puts every charge back exactly where it was before Start, with its initial velocity |
+| Any | **Start / Pause / Reset** | Run the simulation. Reset goes back to setup: non-environmental charges are deleted, the rest return to their initial position and velocity, and you can move them and Start again |
 | Top-left | Wall restitution slider | 1 = elastic walls, below 1 = energy lost per bounce |
 | Top-right | Time step, max FPS | Simulation speed and accuracy |
 | Top-right | **Radiation ON/OFF** | Larmor radiation at the real speed of light. Accelerating charges send out wavefronts |
@@ -278,7 +278,7 @@ This is a teaching-grade classical model. The list is deliberately thorough, and
 
 ## Verification
 
-Every number below is produced by [`tests/test_physics.py`](tests/test_physics.py), which runs on every push ([CI](.github/workflows/tests.yml)). The orbit tests use one setup: a charge orbiting a fixed opposite charge, q = ±1 C, m = 1 kg, r = 300 px, ε = 400 px, 400 steps per orbit, no walls or collisions, with the speed set so the orbit is circular in the softened potential.
+Every number below is produced by [`tests/test_physics.py`](tests/test_physics.py), and [`tests/test_app_flow.py`](tests/test_app_flow.py) clicks through the real app headless. Both run on every push ([CI](.github/workflows/tests.yml)). The orbit tests use one setup: a charge orbiting a fixed opposite charge, q = ±1 C, m = 1 kg, r = 300 px, ε = 400 px, 400 steps per orbit, no walls or collisions, with the speed set so the orbit is circular in the softened potential.
 
 | Test | Measured result |
 |---|---|
@@ -293,6 +293,7 @@ Every number below is produced by [`tests/test_physics.py`](tests/test_physics.p
 | Collisions | Elastic: momentum and KE conserved. Head-on with e = 0.5: each rebounds at half speed. Walls: normal velocity × restitution |
 | Wavefronts | Exactly one pair per orbit |
 | 3D surface potential | Matches $`\sum_i k_e q_i / r_i`$ |
+| Start, Pause, Reset, drag (scripted clicks on the real app) | Reset returns to setup from running or paused; a dragged charge starts from its new spot; Start works again |
 
 During the October 2026 review, the vectorised forces were also checked against the original loop code: identical apart from one pair inside the old 20 px clamp, and about 33× faster at N = 20. The numbers do not lie, and neither does this table.
 
@@ -309,7 +310,7 @@ FREE1105/
 ├── phase4_visualiser.py          # 3D potential surface, run as a separate process
 ├── gui.py                        # buttons, sliders, toggles, creation form
 ├── constants_for_all_files.py
-├── tests/test_physics.py         # 16 headless tests behind the Verification table
+├── tests/                        # 19 headless tests: physics (Verification table) and the app's click flow
 ├── tools/make_demo_gif.py        # renders assets/demo.gif with the real engine
 ├── FREE1105 Primary Notebook.ipynb   # development log, phase by phase
 ├── requirements.txt
@@ -357,7 +358,7 @@ FREE1105/
 
 | Issue found | Fix |
 |---|---|
-| Reset had three copies of its handler, two of them unreachable | One Reset handler, in every state: everything goes back to how it was before Start |
+| Buttons decided they were clicked from a hover flag that goes stale while they're off screen, and the Reset click was passed on to the setup code, where it could also count as a Start click. Two extra Reset handlers happened to undo the accidental restart | Buttons check where the click actually landed, and the Reset click is consumed. One Reset handler, same behaviour as before |
 | On Ubuntu/Debian with matplotlib from both apt and pip, the 3D window crashed on start ("Unknown projection '3d'"), silently, because it runs in a separate process | The visualiser loads the 3D toolkit that matches its matplotlib, and the main window reports it if the 3D window ever dies |
 | Extreme inputs could overflow to inf/NaN and crash the renderer | The simulation pauses with a message instead |
 

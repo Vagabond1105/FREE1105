@@ -88,10 +88,11 @@ while running:
             running = False
         
         # 2. GLOBAL: Reset Button (Works in ANY state to save you)
-        # Puts everything back exactly as it was before Start: every charge returns to its
-        # initial position and velocity, and nothing is deleted.
+        # Back to SETUP: the non-environmental charges are deleted and the rest return to
+        # their initial position and velocity, so they can be moved and Started again.
         if reset_btn.handle_event(event):
             sim_state = 0 # Force back to SETUP
+            all_point_charges = [pc for pc in all_point_charges if pc.environmental]
             for pc in all_point_charges:
                 pc.reset()
             selected_charge = None
@@ -100,6 +101,9 @@ while running:
             radiation_renderer.clear()
             numerics_blew_up = False
             print("SIMULATION RESET")
+            # This click is used up: passing it on to the SETUP code below could also
+            # count it as a click on Start and restart the run straight away
+            continue
 
         # --- C. STATE SPECIFIC EVENTS ---
         
@@ -145,6 +149,9 @@ while running:
                     radiation_renderer.clear()
                     print("SIMULATION STARTED")
                     print(f"Initial Total Energy: {initial_total_energy:.2e} J")
+                    # This click is used up: Pause sits exactly where Start is, so passing
+                    # it on to the RUNNING code below would pause the run straight away
+                    continue
 
             # 2. Sliders
             wall_cor_slider.handle_event(event)
