@@ -5,7 +5,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![Status: complete](https://img.shields.io/badge/status-complete-brightgreen.svg)
 
-A 2D classical electrodynamics sandbox, written from scratch in Python. You place point charges, give them masses, velocities and restitution, press **Start**, and Coulomb's law takes it from there. Accelerating charges radiate, and you can see the light leave them.
+A 2D classical electrodynamics sandbox in Python, built without any physics libraries. You place point charges, give them masses, velocities and restitution, press **Start**, and Coulomb's law takes it from there. Accelerating charges radiate, and you can see the light leave them.
 
 ![FREE1105 demo: six charges orbiting a fixed positive charge, each radiating Larmor wavefronts in its own colour](assets/demo.gif)
 
