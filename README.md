@@ -152,19 +152,15 @@ The last pass made the repository something other people can trust and run: a te
 
 ## Physics
 
-### 1. Coulomb force with Plummer softening
+### 1. Coulomb force with Plummer softening  
 
-Every pair of charges interacts through a softened Coulomb force:
+Every pair of charges interacts through a softened Coulomb force:  
 
-```math
-\vec F_{ij} = k_e\, q_i q_j \, \frac{\vec r_i - \vec r_j}{\left(|\vec r_i - \vec r_j|^2 + \varepsilon^2\right)^{3/2}}, \qquad \varepsilon = 400\ \text{px}.
-```
+$$\vec F_{ij} = k_e\, q_i q_j \, \frac{\vec r_i - \vec r_j}{\left(|\vec r_i - \vec r_j|^2 + \varepsilon^2\right)^{3/2}}, \qquad \varepsilon = 400\ \text{px}.$$  
 
-This force is exactly $`-\nabla`$ of the softened potential energy
+This force is exactly $-\nabla$ of the softened potential energy  
 
-```math
-U = \sum_{i<j} \frac{k_e\, q_i q_j}{\sqrt{r_{ij}^2 + \varepsilon^2}},
-```
+$$U = \sum_{i<j} \frac{k_e\, q_i q_j}{\sqrt{r_{ij}^2 + \varepsilon^2}}.$$
 
 so the force and the energy readout always describe the same physics (a test checks this by finite differences). Softening removes the $`r \to 0`$ singularity. Without it, a close pass between opposite charges produces arbitrarily large accelerations that no fixed time step can resolve. The technique comes from gravitational N-body codes, and 400 px was chosen empirically by watching the energy during close encounters.
 
