@@ -32,7 +32,7 @@ K_COULOMB = 8.99e9 # Coulomb's Constant in N m²/C²
 E_CHARGE = 1.602e-19 # Elementary Charge in Coulombs
 E_MASS = 9.109e-31 # Electron Mass in kg
 P_MASS = 1.672e-27 # Proton Mass in kg
-C_LIGHT = 2.998e8 # Real speed of light in m/s (1 px = 1 m); the radiation slider can lower it
+C_LIGHT = 2.998e8 # Real speed of light in m/s (1 px = 1 m), used by Larmor radiation
 
 # simulation states
 

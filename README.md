@@ -43,7 +43,7 @@ The 3D potential window opens alongside the main window.
 | Any | **Start / Pause / Reset** | Run the simulation; Reset deletes non-environmental charges and returns the rest to their initial state |
 | Top-left | Wall restitution slider | 1 = elastic walls, below 1 = energy lost per bounce |
 | Top-right | Time step, max FPS | Simulation speed and accuracy |
-| Top-right | **Speed of light c**, **Radiation ON/OFF** | Larmor radiation; c is on a log scale from 10² px/s to the real 3×10⁸ |
+| Top-right | **Radiation ON/OFF** | Larmor radiation at the real speed of light; accelerating charges send out wavefronts |
 | Running | TRAILS | Fading trails |
 | Bottom-left | Energy readout | KE, PE, radiated energy, total, relative change since Start, and max v/c when radiation is on |
 
@@ -116,7 +116,7 @@ This is the first step of the original phase 5 ("magnetic fields and light"). Ac
 - light is emitted perpendicular to the acceleration;
 - the energy comes out of KE;
 - the colour runs from red to violet, scaled relative to the other charges on screen;
-- the strength is adjustable through a scaled c.
+- the strength was first adjustable through a scaled c (a slider). I later fixed c at its real value, and replaced the original lobe drawing with outgoing wavefronts.
 
 I chose to colour by the characteristic frequency of the motion rather than by power, because that is what actually sets the colour of the emitted light. The implementation was AI-written to this design. See [Physics § 5](#5-larmor-radiation-phase-5a).
 
@@ -168,7 +168,7 @@ Here $a$ is the **net** acceleration. Fields superpose before they are squared, 
 
 $$\frac{dP}{d\Omega} \propto \sin^2\theta,$$
 
-with θ measured from the acceleration. No light goes along the force; the maximum is perpendicular to it. In 3D this is a doughnut around the acceleration axis. On screen it is drawn as its cross-section: **two lobes perpendicular to the net force**, with the exact $\sin^2$ shape.
+with θ measured from the acceleration. No light goes along the force; the maximum is perpendicular to it. In 3D this is a doughnut around the acceleration axis. On screen each charge sends out pairs of **90° arcs perpendicular to the net force**, one on each side, that spread outward as wavefronts. 90° is the half-power width of the pattern ($\sin^2\theta \ge \tfrac12$ for 45° ≤ θ ≤ 135°), and brightness along each arc follows the pattern: brightest in the middle, fading to the edges. A wavefront stays centred on the point where it was emitted, because light doesn't follow its source. A charge on a circular orbit has its acceleration pointing at the centre, so it sends light forward and backward along its path and leaves a wake of arcs. The arcs spread at a display speed of 4000 px per simulated second, not at c, which would cross the screen in about 5 μs.
 
 **Energy loss.** The pattern is front–back symmetric, so the light carries away energy but **no net momentum**. Each step, a radiating charge loses $P\,\Delta t$ of kinetic energy. Its speed is scaled down and its direction is unchanged. This energy-drain method is used instead of the Abraham–Lorentz self-force $\frac{2}{3}k_e q^2 \dot{\vec a}/c^3$, which has unphysical runaway solutions. Averaged over the motion, both give the same energy loss. The radiated energy is tallied and the readout shows
 
@@ -176,9 +176,9 @@ $$KE + PE + E_{\text{rad}} = E_0,$$
 
 so energy bookkeeping still provides a consistency check.
 
-**Colour.** Real emitted light has the frequency of the motion that produces it. For circular motion that frequency is $\omega = a/v$ exactly, and this ratio is a good estimate in general. Each lobe is coloured by $\omega$ on a log scale relative to the other charges on screen: the slowest-turning charge is **red** and the fastest is **violet**, following the visible spectrum. Lobe size and opacity show the relative radiated **power**, also on a log scale. Log scales are needed because $P \propto a^2 \propto 1/r^4$ spans many orders of magnitude, and a linear scale would leave everything except the strongest emitter at the bottom.
+**Colour.** Real emitted light has the frequency of the motion that produces it. For circular motion that frequency is $\omega = a/v$ exactly, and this ratio is a good estimate in general. Each charge's wavefronts are coloured by $\omega$ on a log scale relative to the other charges on screen: the slowest-turning charge is **red** and the fastest is **violet**, following the visible spectrum. The ripple rate is **one to one** with the motion: each charge emits one pair of arcs per cycle, every $T = 2\pi/\omega$ of simulated time. Twice the frequency gives twice the ripples and half the on-screen wavelength ($\lambda = v_{\text{display}} T$). A typical orbit here has $\omega \approx 8$ rad/s, so it sends out one ripple per orbit. Brightness shows the relative radiated **power**, also on a log scale. Log scales are needed because $P \propto a^2 \propto 1/r^4$ spans many orders of magnitude, and a linear scale would leave everything except the strongest emitter at the bottom.
 
-**Strength.** With the real $c = 3\times10^8$, radiation from charges moving at a few thousand px/s is negligible: about $10^{-15}$ of the orbital energy per orbit. The **speed of light slider** lowers c so the effect becomes visible. This is a "slow light" universe. The readout shows the largest $v/c$ and turns red above 0.3, because the formula assumes $v \ll c$. The default $c = 3\times10^4$ px/s gives $v/c \approx 0.08$ for a typical orbit, and the orbit visibly spirals inward.
+**Strength.** c is the real $3\times10^8$ (1 px = 1 m). At that value, radiation from charges moving at a few thousand px/s is tiny: about $10^{-15}$ of the orbital energy per orbit, so orbits don't visibly decay. The wavefronts are drawn on a relative scale, so they still show where and how strongly each charge radiates. The energy readout tallies the radiated energy, and shows the largest $v/c$, which turns red above 0.3 because the formula assumes $v \ll c$. An earlier version had a slider that lowered c (a "slow light" universe) so the orbit spiralled inward visibly. The verification tests below still use a lowered c, because that makes the energy loss big enough to measure.
 
 ### 6. Potential heatmap and 3D surface
 
@@ -198,9 +198,9 @@ This is a teaching-grade classical model. The list below is deliberately thoroug
 
 | Simplification | Real physics | Consequence here |
 |---|---|---|
-| **Electrostatic forces only.** No magnetic force between moving charges | Moving charges make magnetic fields, and the force is the full Lorentz force $q(\vec E + \vec v\times\vec B)$. The magnetic interaction is smaller by about $(v/c)^2$ | With real c the error is negligible. With radiation on and c lowered to make it visible, $v/c \sim 0.1$, so the missing magnetic forces are about 1%. The lowered c is applied to radiation only, not consistently. Fixing this is phase 5b |
+| **Electrostatic forces only.** No magnetic force between moving charges | Moving charges make magnetic fields, and the force is the full Lorentz force $q(\vec E + \vec v\times\vec B)$. The magnetic interaction is smaller by about $(v/c)^2$ | With the real c, $v/c \sim 10^{-5}$, so the error is negligible. Adding it is phase 5b |
 | **Instantaneous action at a distance** | Fields propagate at c. Each charge feels the others where they were at the *retarded* time (Liénard–Wiechert potentials) | Same order as above: fine for $v \ll c$ |
-| **3D Coulomb law in a 2D world** | Genuine 2D electrostatics has a logarithmic potential and a 1/r force | These are really 3D charges confined to a plane. The radiation lobes are a slice of the 3D doughnut |
+| **3D Coulomb law in a 2D world** | Genuine 2D electrostatics has a logarithmic potential and a 1/r force | These are really 3D charges confined to a plane. The radiation arcs are a slice of the 3D doughnut |
 | **Softening, ε = 400 px** | Point charges obey $1/r^2$ down to (at least) nuclear scales | ε is comparable to the screen size, so it is a big modification. At 300 px the force is only **22%** of the true Coulomb value, and at short range it flattens out instead of diverging. Motion is qualitatively Coulomb-like, but quantitatively softer |
 | **Conducting walls aren't modelled** | A real conducting wall induces image charges and attracts nearby charges | Walls only reflect particles mechanically |
 
@@ -210,6 +210,7 @@ This is a teaching-grade classical model. The list below is deliberately thoroug
 |---|---|---|
 | **Non-relativistic Larmor** | Liénard's relativistic formula grows as $\gamma^6$, and at high speed the emission is beamed forward along $\vec v$ (synchrotron "headlight") | Valid only while $v \ll c$. The readout warns above $v/c = 0.3$ |
 | **Energy drain instead of a self-force** | Radiation reaction is a subtle, still-debated problem (Abraham–Lorentz–Dirac, Landau–Lifshitz) | Correct energy loss rate, but the instantaneous force direction isn't modelled. A charge momentarily at rest can't lose KE in that step, so that step's emission isn't tallied |
+| **Wavefronts are drawn, not simulated** | Light travels at c and its fields act on other charges | The arcs are a picture of the emission pattern, moving at a display speed. They carry no field |
 | **Collisions don't radiate** | A sudden stop radiates strongly (bremsstrahlung: the X-rays in an X-ray tube) | Collision and wall impulses are instantaneous, so $a$ would be infinite. They are excluded |
 | **Emitted light doesn't interact with anything** | Radiation carries fields that push on other charges (absorption, scattering) | Energy simply leaves the system |
 | **Colour is relative** | A charge circling at ω = 20 rad/s emits ~3 Hz radio waves, nowhere near visible light | Red→violet ranks the charges by frequency; it is not the true colour |
@@ -217,7 +218,7 @@ This is a teaching-grade classical model. The list below is deliberately thoroug
 
 ### Things that only quantum mechanics fixes
 
-- **The classical atom collapses.** A classical electron orbiting a proton at the Bohr radius radiates its energy away and spirals into the nucleus in about **1.6×10⁻¹¹ s**. Turn radiation on with an orbiting ± pair and you watch exactly this failure of classical physics. Historically it was one of the main motivations for the Bohr model and quantum mechanics.
+- **The classical atom collapses.** A classical electron orbiting a proton at the Bohr radius radiates its energy away and spirals into the nucleus in about **1.6×10⁻¹¹ s**. Historically this was one of the main motivations for the Bohr model and quantum mechanics. The simulation's radiation is exactly this physics, but with the real c and the slow, metre-scale orbits here the collapse takes far too long to see. An earlier slider that lowered c made it visible in a few orbits.
 - **Opposite charges should collapse even without radiation.** Point charges with a pure $1/r^2$ attraction meet in finite time. Here two artificial things stop it: softening, and treating charges as hard discs that bounce. In reality, quantum mechanics (the uncertainty principle) and the Pauli exclusion principle keep atoms from collapsing.
 
 ### Mechanics and numerics
@@ -254,10 +255,10 @@ All numbers below come from headless tests of `physics_engine.py`. In each test 
 FREE1105/
 ├── main.py                  # loop, state machine (SETUP / RUNNING / PAUSED), rendering, energy readout
 ├── physics_engine.py        # softened Coulomb, Velocity-Verlet, Larmor radiation, collisions, energy
-├── point_charges.py         # PointCharge (state, trails, arrows, drawing) and radiation-lobe rendering
+├── point_charges.py         # PointCharge (state, trails, arrows, drawing) and radiation wavefront rendering
 ├── electric_field.py        # 2D potential heatmap (¼-resolution grid, scaled up)
 ├── phase4_visualiser.py     # 3D potential surface, run as a separate process
-├── gui.py                   # buttons, sliders (incl. log-scale), toggles, creation form
+├── gui.py                   # buttons, sliders, toggles, creation form
 ├── constants_for_all_files.py
 ├── FREE1105 Primary Notebook.ipynb   # development log, phase by phase
 └── requirements.txt
@@ -281,7 +282,7 @@ FREE1105/
 - **Phase 2 (Nov 2025):** I designed and debugged it, including the state machine, collision handling and the Euler → RK2 → RK4 → Verlet progression and its tuning. The GUI and the first draft of the physics engine were AI-generated, then integrated and reworked by me.
 - **Phase 4 (Feb 2026):** lightly AI-assisted.
 - **October 2026 review:** an AI-assisted code review found the issues in the table below, and the fixes and repo clean-up were AI-implemented.
-- **Phase 5a, radiation (Oct 2026):** the design is mine (direction, energy drain from KE, red→violet relative colour scale, scaled c). The implementation and tests were AI-written.
+- **Phase 5a, radiation (Oct 2026):** the design is mine (direction, energy drain from KE, red→violet relative colour scale, scaled c, and later the switch to real c and 90° wavefront arcs). The implementation and tests were AI-written.
 - **This README:** written by Claude from the code, the git history and my notebook notes.
 
 ## Review fixes (October 2026)
@@ -298,8 +299,8 @@ FREE1105/
 
 ## Roadmap
 
-- **Phase 5b, magnetism:** velocity-dependent (Darwin) forces and $\vec v \times \vec B$, using the same scaled c as radiation, so the slow-light universe is consistent.
-- **Phase 5c, retardation:** fields propagating at c (Liénard–Wiechert), visible as expanding wavefronts.
+- **Phase 5b, magnetism:** velocity-dependent (Darwin) forces and $\vec v \times \vec B$, at the real c.
+- **Phase 5c, retardation:** fields propagating at c (Liénard–Wiechert), so the wavefronts become real fields rather than a picture.
 - **Phase 3, rigid bodies:** charged triangles and rectangles with torque from non-uniform charge distributions; strings.
 - Bremsstrahlung on collisions, given finite-duration contacts.
 - Barnes–Hut $O(N\log N)$ forces, or GPU, for large N.

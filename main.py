@@ -34,10 +34,9 @@ dt_slider = GenericSlider(1250, 50, 150, 30,min_val=0.00005, max_val=0.02, initi
                           label="Time Step (dt):", fmt="{:.5f}")
 fps_slider = GenericSlider(1250, 100, 150, 30, min_val=60, max_val=9000, initial_val=100, 
                            label="Max FPS:", fmt="{:.0f}")
-# Larmor radiation: with the real c it is far too weak to see, so c is adjustable (log scale)
-c_slider = LogSlider(1250, 150, 150, 30, min_val=1e2, max_val=C_LIGHT, initial_val=3e4,
-                     label="Speed of light c (px/s):")
-radiation_toggle = BinaryToggle(1250, 210, 80, 30, "Radiation:", initial_state=False)
+# Larmor radiation, with the real speed of light
+radiation_toggle = BinaryToggle(1250, 150, 80, 30, "Radiation:", initial_state=False)
+radiation_renderer = RadiationRenderer()
 
 # engine
 physics_engine = PhysicsEngine()
@@ -134,6 +133,7 @@ while running:
                     ke_init, pe_init = physics_engine.compute_energy(all_point_charges)
                     initial_total_energy = ke_init + pe_init
                     physics_engine.reset_radiation()
+                    radiation_renderer.clear()
                     print("SIMULATION STARTED")
                     print(f"Initial Total Energy: {initial_total_energy:.2e} J")
 
@@ -141,7 +141,6 @@ while running:
             wall_cor_slider.handle_event(event)
             dt_slider.handle_event(event)
             fps_slider.handle_event(event)
-            c_slider.handle_event(event)
             radiation_toggle.handle_event(event)
 
             # 3. Context Menu Logic
@@ -281,7 +280,6 @@ while running:
             wall_cor_slider.handle_event(event)
             dt_slider.handle_event(event)
             fps_slider.handle_event(event)
-            c_slider.handle_event(event)
             radiation_toggle.handle_event(event)
 
             if pause_btn.handle_event(event):
@@ -327,8 +325,8 @@ while running:
     # Update wall coefficient
     wall_cor = wall_cor_slider.value 
 
-    # Radiation on/off and the (scaled) speed of light
-    physics_engine.radiation_c = c_slider.real_value if radiation_toggle.state else None
+    # Radiation on/off, at the real speed of light
+    physics_engine.radiation_c = C_LIGHT if radiation_toggle.state else None
 
     # Update visual scales (Always needed for rendering)
     for pc in all_point_charges:
@@ -344,6 +342,9 @@ while running:
         # 2. Handle collisions AFTER integration
         physics_engine.handle_wall_collisions(all_point_charges, wall_cor)
         physics_engine.handle_particle_collisions(all_point_charges)
+
+        # Emit and move the radiation wavefronts (in simulated time, one ripple per cycle of the motion)
+        radiation_renderer.update(all_point_charges, dt)
 
         # No energy "correction" here on purpose: the energy readout must show what the
         # integrator actually does (Verlet: bounded oscillation, no drift), not a value
@@ -387,9 +388,9 @@ while running:
     for pc in all_point_charges:
         pc.render_trails(screen)
 
-    # Layer 2.2: Larmor radiation lobes (behind the particles)
+    # Layer 2.2: Larmor radiation wavefronts (behind the particles)
     if sim_state != 0:
-        render_radiation(screen, all_point_charges)
+        radiation_renderer.render(screen)
 
     for pc in all_point_charges:
         # Only show arrows in setup mode (sim_state == 0)
@@ -436,7 +437,6 @@ while running:
         create_form.render(screen)
         dt_slider.render(screen)
         fps_slider.render(screen)
-        c_slider.render(screen)
         radiation_toggle.render(screen)
 
     elif sim_state == 1:
@@ -444,7 +444,6 @@ while running:
         trails_toggle.render(screen)
         dt_slider.render(screen)
         fps_slider.render(screen)
-        c_slider.render(screen)
         radiation_toggle.render(screen)
 
     elif sim_state == 0.5:

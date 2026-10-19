@@ -66,6 +66,7 @@ class PointCharge:
         # Larmor radiation state, written by the physics engine each step
         self.rad_power = 0.0
         self.rad_accel = np.zeros(2)
+        self.rad_timer = 0.0     # simulated seconds until this charge's next wavefront is drawn
 
         # Radius setup
         self.core_radius = 15
@@ -369,6 +370,15 @@ HUE_VIOLET = 0.76       # fastest motion on screen (~273 deg, spectral violet)
 OMEGA_DECADES = 4       # hue range spans at most 4 decades of omega below the fastest
 POWER_DECADES = 6       # charges radiating < 1e-6 of the strongest are not drawn
 
+ARC_HALF_ANGLE = np.radians(45)  # 90 deg arcs: sin^2(theta) >= 1/2 for theta in 45..135 deg (half-power width)
+ARC_SEGMENTS = 10                # brightness steps along each arc (bright centre, fading ends)
+RIPPLES_PER_CYCLE = 1   # wavefronts per cycle of the motion: 1 = the ripple frequency IS the motion's frequency
+WAVE_SPEED = 4000.0     # px per simulated second. Display only: the real c would cross the screen in ~5 microseconds.
+                        # It has to beat the charges' own speeds (~2000 px/s) or a charge outruns its light
+FADE_DISTANCE = 1400.0  # px a wavefront travels before it has faded out
+WAVE_LIFETIME = FADE_DISTANCE / WAVE_SPEED   # simulated seconds
+MAX_WAVES = 500         # oldest wavefronts are dropped beyond this, to keep the frame rate up
+
 def _log_norm(values, decades):
     """Map values onto 0..1 by log10, relative to the largest on screen.
     Logarithmic because Larmor power ~ a^2 ~ 1/r^4 spans many orders of magnitude;
@@ -380,47 +390,139 @@ def _log_norm(values, decades):
         return np.ones_like(logs)       # all equal: they are all "the strongest"
     return np.clip((logs - lo) / (hi - lo), 0.0, 1.0)
 
-def render_radiation(screen, all_charges):
-    """
-    Draw the Larmor emission pattern of each radiating charge.
 
-    Shape: dP/dOmega ∝ sin^2(theta), theta from the acceleration -> two lobes
-    perpendicular to the net force (none emitted along it).
+class Wavefront:
+    """One outgoing arc of light. It stays centred on the point where it was emitted
+    (light does not follow its source), and grows and fades as it ages."""
+    __slots__ = ("origin", "direction", "r0", "colour", "strength", "age")
+
+    def __init__(self, origin, direction, r0, colour, strength):
+        self.origin = np.array(origin, dtype=float)
+        self.direction = direction      # angle of the arc's centre (perpendicular to the acceleration)
+        self.r0 = r0                    # starting radius: the edge of the particle
+        self.colour = colour
+        self.strength = strength        # 0..1, relative radiated power
+        self.age = 0.0
+
+
+class RadiationRenderer:
+    """
+    Draw Larmor radiation as wavefronts leaving each accelerating charge.
+
+    Shape: dP/dOmega ∝ sin^2(theta), theta from the acceleration, so light goes out
+    sideways to the net force and none along it. Each emission is a pair of 90-degree
+    arcs, one on each side, covering the half-power width of that pattern; brightness
+    along an arc follows the pattern, brightest in the middle and fading to the ends.
 
     Colour: the characteristic frequency of the motion, omega = |a| / |v|
-    (exact for circular motion, where a = v*omega). Real emitted light has this
-    frequency, so faster-turning charges are drawn bluer: red = slowest on screen,
-    violet = fastest. It is a relative scale, not the true colour.
+    (exact for circular motion, where a = v*omega). Faster-turning charges are bluer:
+    red = slowest on screen, violet = fastest. It is a relative scale, not the true colour.
+    The ripples themselves are one to one with the motion: a charge sends out one
+    wavefront pair per cycle, T = 2*pi / omega in simulated time, so twice the frequency
+    gives twice the ripples and half the wavelength on screen.
 
-    Size and opacity: relative radiated power (log scale).
+    Brightness: relative radiated power (log scale), fading with distance travelled.
     """
-    radiating = [pc for pc in all_charges
-                 if pc.rad_power > 0 and np.linalg.norm(pc.vel) > 0]
-    if not radiating:
-        return
 
-    power = np.array([pc.rad_power for pc in radiating])
-    omega = np.array([np.linalg.norm(pc.rad_accel) / np.linalg.norm(pc.vel) for pc in radiating])
-    p_norm = _log_norm(power, POWER_DECADES)
-    w_norm = _log_norm(omega, OMEGA_DECADES)
-    p_floor = power.max() * 10.0**-POWER_DECADES
+    def __init__(self):
+        self.waves = []
+        self._overlay = None
 
-    for pc, p, pn, wn in zip(radiating, power, p_norm, w_norm):
-        if p < p_floor:
-            continue
-        hue = HUE_RED + wn * (HUE_VIOLET - HUE_RED)
-        r, g, b = (int(255 * c) for c in colorsys.hsv_to_rgb(hue, 1.0, 1.0))
-        alpha = int(70 + 150 * pn)
-        lobe = pc.total_radius + 10 + 35 * pn          # pixels
+    def clear(self):
+        self.waves.clear()
 
-        phi_a = np.arctan2(pc.rad_accel[1], pc.rad_accel[0])
-        size = int(2 * lobe + 4)
-        centre = np.array([size / 2, size / 2])
-        surf = pygame.Surface((size, size), pygame.SRCALPHA)
-        # one polygon per lobe: r(phi) = lobe * sin^2(phi - phi_a), phi_a < phi < phi_a + pi, and the mirror one
-        for start in (phi_a, phi_a + np.pi):
-            phis = np.linspace(start, start + np.pi, 40)
-            radii = lobe * np.sin(phis - phi_a) ** 2
-            pts = centre + np.column_stack((radii * np.cos(phis), radii * np.sin(phis)))
-            pygame.draw.polygon(surf, (r, g, b, alpha), [tuple(pt) for pt in pts])
-        screen.blit(surf, (int(pc.position[0] - size / 2), int(pc.position[1] - size / 2)))
+    def update(self, all_charges, sim_dt):
+        """Age the existing wavefronts and emit new ones, in simulated time, so the
+        ripples keep step with the motion at any dt / FPS and freeze when paused."""
+        for w in self.waves:
+            w.age += sim_dt
+        self.waves = [w for w in self.waves if w.age < WAVE_LIFETIME]
+
+        radiating = [pc for pc in all_charges
+                     if pc.rad_power > 0 and np.linalg.norm(pc.vel) > 0]
+        if not radiating:
+            return
+
+        power = np.array([pc.rad_power for pc in radiating])
+        omega = np.array([np.linalg.norm(pc.rad_accel) / np.linalg.norm(pc.vel) for pc in radiating])
+        p_norm = _log_norm(power, POWER_DECADES)
+        w_norm = _log_norm(omega, OMEGA_DECADES)
+        p_floor = power.max() * 10.0**-POWER_DECADES
+        omega_of = {id(pc): w for pc, w in zip(radiating, omega)}
+
+        for pc, p, pn, wn in zip(radiating, power, p_norm, w_norm):
+            pc.rad_timer -= sim_dt
+            if p < p_floor or pc.rad_timer > 0:
+                continue
+            # One ripple per period of the motion, T = 2*pi / omega: the frequency on screen is
+            # the true frequency, so wavelength on screen = WAVE_SPEED * T, exactly proportional to 1/omega
+            period = 2 * np.pi / omega_of[id(pc)] / RIPPLES_PER_CYCLE
+            pc.rad_timer = max(pc.rad_timer + period, 0.0)   # += keeps the rhythm exact between frames
+
+            hue = HUE_RED + wn * (HUE_VIOLET - HUE_RED)
+            colour = tuple(int(255 * c) for c in colorsys.hsv_to_rgb(hue, 0.9, 1.0))
+            strength = 0.35 + 0.65 * pn
+            phi_a = np.arctan2(pc.rad_accel[1], pc.rad_accel[0])
+            for side in (+1, -1):
+                self.waves.append(Wavefront(pc.position, phi_a + side * np.pi / 2,
+                                            pc.total_radius, colour, strength))
+
+        if len(self.waves) > MAX_WAVES:
+            self.waves = self.waves[-MAX_WAVES:]
+
+    def render(self, screen):
+        if not self.waves:
+            return
+        if self._overlay is None or self._overlay.get_size() != screen.get_size():
+            self._overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        overlay = self._overlay
+        overlay.fill((0, 0, 0, 0))
+        overlay.set_clip(WALL_INNER_RECT)       # light stays inside the walls
+
+        lo = np.array([np.inf, np.inf])       # bounding box of everything drawn
+        hi = -lo
+        for w in self.waves:
+            life = w.age / WAVE_LIFETIME
+            fade = w.strength * (1.0 - life) ** 1.5
+            if fade < 0.04:
+                continue
+            radius = w.r0 + WAVE_SPEED * w.age
+            half_core = 1.0 + 2.0 * (1.0 - life)    # wavefronts thin out as they spread
+            unit = _rotate(_ARC_UNIT, w.direction)
+            r, g, b = w.colour
+            # whiter core, so the arc reads as light rather than paint
+            core = (int(r + 0.45 * (255 - r)), int(g + 0.45 * (255 - g)), int(b + 0.45 * (255 - b)))
+            # a soft glow, then the bright core on top
+            for half, colour, peak in ((half_core + 4, (r, g, b), 90),
+                                       (half_core, core, 255)):
+                o = (w.origin + (radius + half) * unit).tolist()
+                n = (w.origin + max(radius - half, 0.0) * unit).tolist()
+                seg_alpha = (peak * fade * _ARC_TAPER).astype(int).tolist()
+                for k in range(ARC_SEGMENTS):
+                    if seg_alpha[k] < 4:
+                        continue
+                    # one curved band per segment; neighbours share edges, so no seams
+                    pygame.draw.polygon(overlay, colour + (seg_alpha[k],), (o[k], o[k + 1], n[k + 1], n[k]))
+            lo = np.minimum(lo, w.origin - radius - 8)
+            hi = np.maximum(hi, w.origin + radius + 8)
+
+        overlay.set_clip(None)
+        if hi[0] > lo[0]:
+            # blit only the region that has light in it
+            drawn = pygame.Rect(int(lo[0]), int(lo[1]), int(hi[0] - lo[0]) + 1, int(hi[1] - lo[1]) + 1)
+            drawn = drawn.clip(WALL_INNER_RECT)
+            screen.blit(overlay, drawn.topleft, drawn)
+
+
+def _rotate(points, angle):
+    """Rotate an (N, 2) array of points about the origin by angle (radians)."""
+    c, s = np.cos(angle), np.sin(angle)
+    return points @ np.array([[c, s], [-s, c]])
+
+# A 90-degree arc on the unit circle, centred on +x, split into ARC_SEGMENTS pieces.
+# The emitted power at angle delta from the arc's centre is sin^2(90 deg - delta) = cos^2(delta);
+# rescaled to be 1 in the middle and 0 at the half-power edges, that is cos(2*delta).
+# Each segment is drawn at that brightness, taken at its midpoint.
+_ARC_EDGES = np.linspace(-ARC_HALF_ANGLE, ARC_HALF_ANGLE, ARC_SEGMENTS + 1)
+_ARC_UNIT = np.column_stack((np.cos(_ARC_EDGES), np.sin(_ARC_EDGES)))
+_ARC_TAPER = np.cos(_ARC_EDGES[:-1] + _ARC_EDGES[1:])

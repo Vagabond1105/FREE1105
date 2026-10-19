@@ -831,17 +831,3 @@ class GenericSlider:
 
     def value_text(self):
         return self.fmt.format(self.value)
-
-class LogSlider(GenericSlider):
-    """A GenericSlider whose knob moves linearly in log10(value), for quantities
-    that span many orders of magnitude. self.value holds log10; use real_value."""
-    def __init__(self, x, y, width, height, min_val, max_val, initial_val, label):
-        super().__init__(x, y, width, height, np.log10(min_val), np.log10(max_val),
-                         np.log10(initial_val), label)
-
-    @property
-    def real_value(self):
-        return 10.0 ** self.value
-
-    def value_text(self):
-        return f"{self.real_value:.2e}"
