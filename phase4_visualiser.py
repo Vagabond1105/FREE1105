@@ -130,9 +130,28 @@ class Phase4Visualiser:
 
 # ── Child process: the matplotlib window ─────────────────────────────────────
 
+def _use_matching_mpl_toolkits():
+    """
+    Make sure the 3D toolkit (mpl_toolkits.mplot3d) is the one that ships with the
+    matplotlib actually being imported.
+
+    On Ubuntu/Debian, the apt package python3-matplotlib installs a .pth hook that
+    claims the mpl_toolkits namespace for its own (older) copy. If a newer matplotlib
+    is also pip-installed, 3D plotting then fails with "Unknown projection '3d'" and
+    this window never opens. Putting the matching folder first fixes it.
+    """
+    import matplotlib
+    import mpl_toolkits
+    own = os.path.join(os.path.dirname(os.path.dirname(matplotlib.__file__)), 'mpl_toolkits')
+    paths = list(mpl_toolkits.__path__)
+    if os.path.isdir(own) and (not paths or os.path.realpath(paths[0]) != os.path.realpath(own)):
+        mpl_toolkits.__path__ = [own] + [p for p in paths if os.path.realpath(p) != os.path.realpath(own)]
+
+
 def _run_window(grid_res, update_interval):
     import matplotlib
     matplotlib.use('TkAgg')  # Must be set before importing pyplot
+    _use_matching_mpl_toolkits()
     import matplotlib.pyplot as plt
 
     lock = threading.Lock()
