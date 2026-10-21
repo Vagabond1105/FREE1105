@@ -88,6 +88,8 @@ class Phase4Visualiser:
         """Launch the visualiser window as a separate process."""
         if self._proc is not None:
             return
+        if sys.platform == "emscripten":
+            return   # in the browser (web build) there are no processes; the 2D heatmap still shows V
         self._proc = subprocess.Popen(
             [sys.executable, os.path.abspath(__file__), str(self.grid_res), str(self.update_interval)],
             stdin=subprocess.PIPE, text=True)
