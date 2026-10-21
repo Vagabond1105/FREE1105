@@ -166,7 +166,7 @@ The last pass made the repository something other people can trust and run: a te
 
 ### Browser version (October 2026)
 
-[A playable web version](https://vagabond1105.github.io/FREE1105/), built from the same files with pygbag. The main loop became `async` (each frame hands control back to the browser), and the 3D window is skipped in the browser. Nothing else changed, and the desktop app behaves as before.
+[A playable web version](https://vagabond1105.github.io/FREE1105/), built from the same files with pygbag. The whole conversion was done by Claude (see [authorship](#authorship)). The main loop became `async` (each frame hands control back to the browser), and the 3D window is skipped in the browser. Nothing else changed, and the desktop app behaves as before.
 
 ---
 
@@ -355,7 +355,7 @@ FREE1105/
 - **October 2026 review:** an AI-assisted review found the issues in the fix log, and the fixes and clean-up were AI-implemented.
 - **Phase 5a, radiation (Oct 2026):** the design is mine (direction, energy drain from KE, red-to-violet frequency colours, real c, 90° wavefronts at one pair per cycle). The implementation was AI-written.
 - **Finishing (Oct 2026):** tests, CI, demo GIF and the final bug fixes were AI-written at my direction.
-- **Browser version (Oct 2026):** my idea; the port and the deploy pipeline were AI-implemented.
+- **Browser version (Oct 2026):** done entirely by Claude (an AI): converting the code to run in the browser, building it, testing it and the deploy pipeline. None of the web conversion is mine.
 - **This README:** written by Claude (an AI) from the code, the git history and my notebook notes.
 
 ## Fix log
