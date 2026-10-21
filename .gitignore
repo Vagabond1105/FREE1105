@@ -5,3 +5,5 @@ __pycache__/
 # stage files written by the notebook's %%writefile cells (regenerated when it runs)
 *_jypter*.py
 *_jupyter*.py
+# local browser builds (pygbag), see README "In the browser"
+web/

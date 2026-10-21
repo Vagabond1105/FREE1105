@@ -1,0 +1,47 @@
+name: web
+
+# Builds the browser version with pygbag (the same Python, compiled to WebAssembly)
+# and publishes it to GitHub Pages on every push to main.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the browser version
+        run: |
+          pip install pygbag==0.9.3
+          # only the app's own modules: pygbag packs everything in the folder it is given
+          mkdir -p web/free1105
+          cp *.py web/free1105/
+          python -m pygbag --build --title FREE1105 --ume_block 0 --width 1500 --height 900 web/free1105
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/free1105/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

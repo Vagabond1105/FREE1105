@@ -7,11 +7,13 @@
 
 A 2D classical electrodynamics sandbox in Python, built without any physics libraries. You place point charges, give them masses, velocities and restitution, press **Start**, and Coulomb's law takes it from there. Accelerating charges radiate, and you can see the light leave them.
 
+**[▶ Play it in your browser](https://vagabond1105.github.io/FREE1105/)**: no install, the same Python code compiled to WebAssembly. It takes about 20 seconds to load and needs a mouse (right-click places charges).
+
 ![FREE1105 demo: six charges orbiting a fixed positive charge, each radiating Larmor wavefronts in its own colour](assets/demo.gif)
 
 *Six negative charges orbit a fixed positive one, radiating at the real speed of light. Each orbit turns at its own frequency, so each one gets its own colour and sends out one pair of wavefronts per orbit. This GIF is rendered by the actual engine ([`tools/make_demo_gif.py`](tools/make_demo_gif.py)).*
 
-**Status: complete (v1.0, October 2026).** The project did what it set out to do. The list of [possible extensions](#possible-extensions) is there for anyone who wants to take it further, not a to-do list.
+**Status: complete (v1.0, October 2026; v1.1 added the browser version).** The project did what it set out to do. The list of [possible extensions](#possible-extensions) is there for anyone who wants to take it further, not a to-do list.
 
 ### What's in it
 
@@ -24,7 +26,7 @@ A 2D classical electrodynamics sandbox in Python, built without any physics libr
 
 ## Contents
 
-- [Run it](#run-it) · [Controls](#controls)
+- [Run it](#run-it) (or [in the browser](#in-the-browser)) · [Controls](#controls)
 - [Development history](#development-history): how it was built, phase by phase
 - [Physics](#physics): what the engine actually computes
 - [Shortcomings vs real life](#shortcomings-vs-real-life): what's simplified or wrong, and why
@@ -51,6 +53,20 @@ The 3D potential window opens next to the main window.
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+### In the browser
+
+**[vagabond1105.github.io/FREE1105](https://vagabond1105.github.io/FREE1105/)** runs the same code, built with [pygbag](https://github.com/pygame-web/pygbag), which compiles pygame and numpy to WebAssembly. Everything except the 3D potential window works. That window is a separate matplotlib process, and a browser can't start processes, so the web version shows the 2D heatmap only.
+
+It rebuilds and republishes itself on every push to `main` ([`.github/workflows/web.yml`](.github/workflows/web.yml)). To try a build locally:
+
+```bash
+pip install pygbag
+mkdir -p web/free1105 && cp *.py web/free1105/
+pygbag --ume_block 0 --width 1500 --height 900 web/free1105    # then open http://localhost:8000
+```
+
+The browser runs the loop at the screen's refresh rate (usually 60 Hz), so the Max FPS slider tops out there.
 
 **Regenerate the demo GIF** (needs `ffmpeg`):
 
@@ -147,6 +163,10 @@ I chose to colour by the frequency of the motion rather than by power, because f
 ### Finishing (October 2026)
 
 The last pass made the repository something other people can trust and run: a test suite that reproduces every claimed number, continuous integration, the demo GIF, an MIT license, and a few bug fixes (see the [fix log](#fix-log)). Then the project was declared complete. Alhamdulillah.
+
+### Browser version (October 2026)
+
+[A playable web version](https://vagabond1105.github.io/FREE1105/), built from the same files with pygbag. The main loop became `async` (each frame hands control back to the browser), and the 3D window is skipped in the browser. Nothing else changed, and the desktop app behaves as before.
 
 ---
 
@@ -299,6 +319,7 @@ During the October 2026 review, the vectorised forces were also checked against 
 
 ```
 FREE1105/
+├── .github/workflows/            # tests.yml: tests on every push; web.yml: builds and publishes the browser version
 ├── main.py                       # loop, state machine (SETUP / RUNNING / PAUSED), rendering, energy readout
 ├── physics_engine.py             # softened Coulomb, Velocity-Verlet, Larmor radiation, collisions, energy
 ├── point_charges.py              # PointCharge (state, trails, arrows, drawing) and the radiation wavefronts
@@ -334,6 +355,7 @@ FREE1105/
 - **October 2026 review:** an AI-assisted review found the issues in the fix log, and the fixes and clean-up were AI-implemented.
 - **Phase 5a, radiation (Oct 2026):** the design is mine (direction, energy drain from KE, red-to-violet frequency colours, real c, 90° wavefronts at one pair per cycle). The implementation was AI-written.
 - **Finishing (Oct 2026):** tests, CI, demo GIF and the final bug fixes were AI-written at my direction.
+- **Browser version (Oct 2026):** my idea; the port and the deploy pipeline were AI-implemented.
 - **This README:** written by Claude (an AI) from the code, the git history and my notebook notes.
 
 ## Fix log
